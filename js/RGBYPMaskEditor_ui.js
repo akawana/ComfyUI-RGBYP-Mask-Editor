@@ -169,10 +169,10 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
             const toolsSpacer = document.createElement("div");
             toolsSpacer.style.height = "100%";
 
-            const brushBtn = makeIconButton("/extensions/ComfyUI-RGBYP-mask/i_brush.png", "Brush");
-            const eraserBtn = makeIconButton("/extensions/ComfyUI-RGBYP-mask/i_erase.png", "Eraser");
-            const scrollBtn = makeIconButton("/extensions/ComfyUI-RGBYP-mask/i_scroll.png", "Scroll");
-            const clearBtn = makeIconButton("/extensions/ComfyUI-RGBYP-mask/i_clear.png", "Clear");
+            const brushBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_brush.png", "Brush");
+            const eraserBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_erase.png", "Eraser");
+            const scrollBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_scroll.png", "Scroll");
+            const clearBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_clear.png", "Clear");
 
             let currentTool = "brush";
             let currentColor = Array.isArray(lastBrushColor) ? [...lastBrushColor] : [255, 0, 0];
@@ -433,19 +433,19 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
             autoButtonsRow.style.justifyContent = "space-between";
 
             const autoHalfBtn = makeIconButton(
-                "/extensions/ComfyUI-RGBYP-mask/i_d_11.png",
+                "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_11.png",
                 "autoMaskSplitHalf"
             );
             const auto1to2Btn = makeIconButton(
-                "/extensions/ComfyUI-RGBYP-mask/i_d_12.png",
+                "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_12.png",
                 "autoMaskSplit1to2"
             );
             const auto2to1Btn = makeIconButton(
-                "/extensions/ComfyUI-RGBYP-mask/i_d_21.png",
+                "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_21.png",
                 "autoMaskSplit2to1"
             );
             const autoThirdsBtn = makeIconButton(
-                "/extensions/ComfyUI-RGBYP-mask/i_d_111.png",
+                "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_111.png",
                 "autoMaskSplitThirds"
             );
 
