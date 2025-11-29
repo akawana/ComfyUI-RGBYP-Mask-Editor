@@ -30,13 +30,6 @@ class RGBYPMaskBridge:
                     },
                 ),
             },
-            "optional": {
-                # Optional input socket (forceInput=True creates a real input port)
-                "file_path": ("STRING", {
-                    "default": "",
-                    "forceInput": True,
-                }),
-            },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
             },
@@ -48,10 +41,6 @@ class RGBYPMaskBridge:
     RETURN_NAMES = ("image", "rgbyp_mask")
     OUTPUT_NODE = True
     FUNCTION = "execute"
-
-    #    @classmethod
-    #    def IS_CHANGED(cls, image, **kwargs):
-    #        return float("nan")
 
     # Extract filename/path from IMAGE tensor metadata
     def _get_original_filename_from_tensor(self, image):
@@ -65,74 +54,38 @@ class RGBYPMaskBridge:
             print(f"[RGBYPMaskBridge] Error reading filename from tensor: {e}")
         return None
 
-    def execute(self, image, clear_on_size_change=True, updater=100.0, file_path="", unique_id=None):
+    def execute(self, image, clear_on_size_change=True, updater=100.0, unique_id=None):
         device = image.device
         b, h, w, c = image.shape
 
-        # -----------------------------------------------------------
-        # Determine original_file_fullpath priority:
-        # 1) provided file_path input
-        # 2) image.file_path metadata
-        # 3) image.image_path / filename / name
-        # 4) stored meta.original
-        # -----------------------------------------------------------
-        original_file_fullpath = None
-
-        if file_path and isinstance(file_path, str) and file_path.strip():
-            original_file_fullpath = os.path.abspath(file_path.strip())
-
-        if not original_file_fullpath and hasattr(image, "file_path"):
-            try:
-                val = getattr(image, "file_path")
-                if isinstance(val, str) and val.strip():
-                    original_file_fullpath = os.path.abspath(val.strip())
-            except Exception as e:
-                print(f"  Error reading image.file_path: {e}")
-
-        if not original_file_fullpath:
-            tfname = self._get_original_filename_from_tensor(image)
-            if tfname:
-                original_file_fullpath = os.path.abspath(tfname)
 
         if unique_id is None:
             unique_id = "0"
 
-        # -----------------------------------------------------------
         # TEMP paths
-        # -----------------------------------------------------------
         temp_dir = folder_paths.get_temp_directory()
 
+        original_name = f"RGBYP_{unique_id}_original.png"
         composite_name = f"RGBYP_{unique_id}_composite.png"
         mask_name = f"RGBYP_{unique_id}_mask.png"
         meta_name = f"RGBYP_{unique_id}_meta.json"
 
+        original_path = os.path.join(temp_dir, original_name)
         composite_path = os.path.join(temp_dir, composite_name)
         mask_path = os.path.join(temp_dir, mask_name)
         meta_path = os.path.join(temp_dir, meta_name)
 
         os.makedirs(temp_dir, exist_ok=True)
 
-        # -----------------------------------------------------------
-        # Load previous meta (to keep original path)
-        # -----------------------------------------------------------
-        stored_original_from_meta = None
+        # Load previous meta (optional, no longer used for paths)
         if os.path.isfile(meta_path):
             try:
                 with open(meta_path, "r", encoding="utf-8") as f:
-                    meta_old = json.load(f)
-                stored_original_from_meta = meta_old.get("original")
+                    json.load(f)
             except Exception as e:
-                print(f"  ERROR reading meta.json: {e}")
+                print(f"[RGBYPMaskBridge] ERROR reading meta.json: {e}")
 
-        if not original_file_fullpath and stored_original_from_meta:
-            original_file_fullpath = stored_original_from_meta
-
-        if not original_file_fullpath:
-            original_file_fullpath = ""
-
-        # -----------------------------------------------------------
         # Mask loading
-        # -----------------------------------------------------------
         mask_tensor = torch.zeros_like(image)
         mask_pil = None
 
@@ -143,8 +96,11 @@ class RGBYPMaskBridge:
 
                 if original_mask_size != (w, h):
                     if clear_on_size_change:
-                        blank = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                        blank.save(mask_path)
+                        try:
+                            os.remove(mask_path)
+                        except OSError:
+                            pass
+                        mask_pil = None
                     else:
                         m = m.resize((w, h), Image.LANCZOS)
                         m.save(mask_path)
@@ -158,28 +114,35 @@ class RGBYPMaskBridge:
                     mask_tensor = torch.from_numpy(arr)[None, ...].to(device)
 
             except Exception as e:
-                print(f"  ERROR loading mask: {e}")
-
+                print(f"[RGBYPMaskBridge] ERROR loading mask: {e}")
+                mask_pil = None
         else:
-            blank = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            try:
-                blank.save(mask_path)
-            except Exception as e:
-                print(f"  ERROR saving empty mask: {e}")
+            mask_pil = None
 
-        # -----------------------------------------------------------
-        # If mask is completely black → replace with 64×64 black mask
-        # -----------------------------------------------------------
-        if mask_tensor.sum() == 0:
+        has_color_mask = False
+        if mask_pil is not None:
+            try:
+                if mask_tensor.sum().item() != 0.0:
+                    has_color_mask = True
+            except Exception:
+                has_color_mask = False
+
+        if not has_color_mask:
             mask_tensor = torch.zeros((1, 64, 64, 3), device=device, dtype=torch.float32)
 
-        # -----------------------------------------------------------
-        # Generate composite image (for UI preview only)
-        # -----------------------------------------------------------
+        # Generate base image PIL
         arr_img = (image[0].detach().cpu().numpy().clip(0, 1) * 255).astype(np.uint8)
         base_pil = Image.fromarray(arr_img, "RGB")
 
-        if mask_pil is not None and mask_tensor.sum() != 0:
+        # Save original image copy to temp
+        try:
+            base_pil.save(original_path)
+        except Exception as e:
+            print(f"[RGBYPMaskBridge] ERROR saving original image: {e}")
+
+        # Generate composite image only if mask has color
+        composite_exists = False
+        if has_color_mask and mask_pil is not None:
             rgba_base = base_pil.convert("RGBA")
 
             if updater is None:
@@ -202,19 +165,24 @@ class RGBYPMaskBridge:
 
             merged = Image.alpha_composite(rgba_base, mask_for_merge)
             final_pil = merged.convert("RGB")
+
+            try:
+                final_pil.save(composite_path)
+                composite_exists = True
+            except Exception as e:
+                print(f"[RGBYPMaskBridge] ERROR saving composite: {e}")
         else:
-            final_pil = base_pil
+            try:
+                if os.path.isfile(composite_path):
+                    os.remove(composite_path)
+            except OSError:
+                pass
 
-        try:
-            final_pil.save(composite_path)
-        except Exception as e:
-            print(f"  ERROR saving composite: {e}")
-
-        # -----------------------------------------------------------
-        # Save meta.json
-        # -----------------------------------------------------------
+        # Save meta.json with paths inside temp
         meta = {
-            "original": original_file_fullpath,
+            "original": original_path,
+            "mask": mask_path if has_color_mask and os.path.isfile(mask_path) else "",
+            "composite": composite_path if composite_exists else "",
             "width": int(w),
             "height": int(h),
         }
@@ -222,17 +190,13 @@ class RGBYPMaskBridge:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False)
         except Exception as e:
-            print(f"  ERROR saving meta.json: {e}")
+            print(f"[RGBYPMaskBridge] ERROR saving meta.json: {e}")
 
-        # -----------------------------------------------------------
-        # UI tensor preview (not used in graph)
-        # -----------------------------------------------------------
-        out_np = np.array(final_pil).astype(np.float32) / 255.0
-        final_tensor = torch.from_numpy(out_np)[None, ...].to(device)
-
+        # UI preview: show composite if it exists, otherwise original
+        ui_filename = composite_name if composite_exists else original_name
         ui = {
             "images": [{
-                "filename": composite_name,
+                "filename": ui_filename,
                 "subfolder": "",
                 "type": "temp",
             }]

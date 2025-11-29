@@ -48,6 +48,11 @@ function makeIconButton(iconName, altText) {
 
 export function openMaskEditor(node, imageWidget, imageInfo) {
             const originalFilename = imageWidget?.value || imageInfo?.filename || "rgbyp.png";
+            const nodeTypeName = node?.comfyClass || node?.type || node?.constructor?.name || "";
+            const isRgbypBridgeNode =
+                nodeTypeName === "LoadImageWithFileData" ||
+                nodeTypeName === "RGBYPMaskBridge";
+
 
             function stripExt(name) {
                 const s = (name == null) ? "" : String(name);
@@ -98,6 +103,7 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
             const maskSrc = `/view?filename=${encodeURIComponent(
                 tempMaskFilename
             )}&type=temp&_rgbyp=${Date.now()}`;
+            let dynamicMaskSrc = maskSrc;
 
             const overlay = document.createElement("div");
             overlay.style.position = "fixed";
@@ -120,12 +126,22 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
             windowDiv.style.boxShadow = "0 0 20px rgba(0,0,0,0.8)";
             windowDiv.style.padding = "10px";
             windowDiv.style.gap = "10px";
-            windowDiv.style.maxWidth = "90vw";
-            windowDiv.style.maxHeight = "90vh";
+
+            function sizeWindow() {
+                const margin = 60;
+                const w = Math.max(400, window.innerWidth - margin * 2);
+                const h = Math.max(300, window.innerHeight - margin * 2);
+                windowDiv.style.width = w + "px";
+                windowDiv.style.height = h + "px";
+            }
+            sizeWindow();
 
             let keyHandler = null;
             let keyUpHandler = null;
-            const resizeHandler = () => resizeCursorCanvasToMask();
+            const resizeHandler = () => {
+                sizeWindow();
+                resizeCursorCanvasToMask();
+            };
 
             const closeEditor = () => {
                 if (keyHandler) window.removeEventListener("keydown", keyHandler);
@@ -222,9 +238,10 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
             canvasContainer.style.background = "#111";
             canvasContainer.style.borderRadius = "6px";
             canvasContainer.style.overflow = "scroll"; // scrollbars always visible
-            canvasContainer.style.maxWidth = "70vw";
-            canvasContainer.style.maxHeight = "80vh";
             canvasContainer.style.position = "relative";
+            canvasContainer.style.height = "100%";
+            canvasContainer.style.minHeight = "0";
+            canvasContainer.style.minWidth = "0";
 
             const maskCanvas = document.createElement("canvas");
             const maskCtx = maskCanvas.getContext("2d");
@@ -689,14 +706,23 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
                 maskBuffer.height = h;
                 maskBufferCtx.clearRect(0, 0, w, h);
 
-                maskCanvas.style.maxWidth = "100%";
-                maskCanvas.style.maxHeight = "100%";
+                // Fit image into available canvas container area with preserved aspect ratio
+                let scale = 1;
+                const containerRect = canvasContainer.getBoundingClientRect();
+                if (containerRect.width > 0 && containerRect.height > 0) {
+                    const scaleX = containerRect.width / w;
+                    const scaleY = containerRect.height / h;
+                    scale = Math.min(scaleX, scaleY);
+                }
+                if (!Number.isFinite(scale) || scale <= 0) {
+                    scale = 1;
+                }
 
-                currentZoom = 1;
+                currentZoom = scale;
                 maskCanvas.style.transformOrigin = "top left";
-                maskCanvas.style.transform = "scale(1)";
+                maskCanvas.style.transform = `scale(${scale})`;
                 cursorCanvas.style.transformOrigin = "top left";
-                cursorCanvas.style.transform = "none";
+                cursorCanvas.style.transform = `scale(${scale})`;
                 canvasContainer.scrollLeft = 0;
                 canvasContainer.scrollTop = 0;
 
@@ -705,7 +731,7 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
                     redraw();
                 }, 0);
 
-                maskImg.src = maskSrc;
+                if (dynamicMaskSrc) { maskImg.src = dynamicMaskSrc; } else { clearMaskBuffer(true); }
             };
             baseImg.onerror = () => {};
 
@@ -719,48 +745,72 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
 
             maskImg.onerror = () => {};
 
-            async function resolveBaseSrcFromMeta() {
-                try {
-                    const url = `/view?filename=${encodeURIComponent(
-                        metaFilename
-                    )}&type=temp&_t=${Date.now()}`;
-                    const resp = await api.fetchApi(url, { method: "GET" });
-                    if (!resp.ok) {
-                        return baseSrcFallback;
-                    }
-                    const text = await resp.text();
-                    let meta;
-                    try {
-                        meta = JSON.parse(text);
-                    } catch (e) {
-                        return baseSrcFallback;
-                    }
-                    const originalPath = meta?.original || "";
-                    if (!originalPath) {
-                        return baseSrcFallback;
-                    }
-                    const parts = originalPath.split(/[\\/]/);
-                    const originalName = parts[parts.length - 1];
-                    if (!originalName) {
-                        return baseSrcFallback;
-                    }
+            
+    async function resolveBaseSrcFromMeta() {
+        try {
+            const url = `/view?filename=${encodeURIComponent(
+                metaFilename
+            )}&type=temp&_t=${Date.now()}`;
+            const resp = await api.fetchApi(url, { method: "GET" });
+            if (!resp.ok) {
+                // no meta yet: keep default temp mask path
+                dynamicMaskSrc = maskSrc;
+                return baseSrcFallback;
+            }
+            const text = await resp.text();
+            let meta;
+            try {
+                meta = JSON.parse(text);
+            } catch (e) {
+                dynamicMaskSrc = maskSrc;
+                return baseSrcFallback;
+            }
 
+            // original image path from meta
+            const originalPath = meta?.original || "";
+            let baseUrl = baseSrcFallback;
+            if (originalPath) {
+                const parts = String(originalPath).split(/[\\/]/);
+                const originalName = parts[parts.length - 1];
+                if (originalName) {
                     const p = new URLSearchParams({
                         filename: originalName,
-                        type: "input",
+                        type: "temp",
                         subfolder: "",
                     });
                     p.append("_rgbyp", Date.now().toString());
-                    const finalUrl = `/view?${p.toString()}`;
-                    return finalUrl;
-                } catch (e) {
-                    return baseSrcFallback;
+                    baseUrl = `/view?${p.toString()}`;
                 }
             }
 
-            resolveBaseSrcFromMeta().then((src) => {
-                baseImg.src = src;
-            });
+            // optional mask path override from meta
+            const maskPath = meta?.mask || "";
+            if (maskPath) {
+                const mparts = String(maskPath).split(/[\\/]/);
+                const maskName = mparts[mparts.length - 1];
+                if (maskName) {
+                    const mp = new URLSearchParams({
+                        filename: maskName,
+                        type: "temp",
+                        subfolder: "",
+                    });
+                    mp.append("_rgbyp", Date.now().toString());
+                    dynamicMaskSrc = `/view?${mp.toString()}`;
+                }
+            }
+            // if maskPath is empty, we leave dynamicMaskSrc as-is (default maskSrc)
+
+            return baseUrl;
+        } catch (e) {
+            dynamicMaskSrc = maskSrc;
+            return baseSrcFallback;
+        }
+    }
+
+    resolveBaseSrcFromMeta().then((src) => {
+        baseImg.src = src;
+    });
+
 
             clearBtn.addEventListener("click", () => {
                 clearMaskBuffer(true);
@@ -1119,8 +1169,8 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
                 const prefix = `RGBYP_${uniqueId}_`;
                 const tempType = "temp";
 
-                const compositeFilename = `${prefix}composite.png`;
-                const maskFilename2 = `${prefix}mask.png`;
+                const tempCompositeFilename = `${prefix}composite.png`;
+                const tempMaskFilename = `${prefix}mask.png`;
 
                 const finalCanvas = document.createElement("canvas");
                 finalCanvas.width = baseImg.width;
@@ -1133,15 +1183,15 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
                 finalCtx.globalAlpha = compositeAlpha;
                 finalCtx.drawImage(maskBuffer, 0, 0);
                 finalCtx.restore();
-                // finalCtx.drawImage(maskBuffer, 0, 0);
 
                 const compositeDataUrl = finalCanvas.toDataURL("image/png");
                 const maskDataUrl = maskBuffer.toDataURL("image/png");
 
-                let uploadedCompositeName = compositeFilename;
+                let uploadedCompositeName = tempCompositeFilename;
 
+                // 1) Upload composite to temp (used by our Python bridge nodes)
                 try {
-                    const compFile = dataURLtoFile(compositeDataUrl, compositeFilename);
+                    const compFile = dataURLtoFile(compositeDataUrl, tempCompositeFilename);
                     const compForm = new FormData();
                     compForm.append("image", compFile);
                     compForm.append("type", tempType);
@@ -1154,12 +1204,13 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
 
                     if (compResp.ok) {
                         const cj = await compResp.json();
-                        uploadedCompositeName = cj.name || compositeFilename;
+                        uploadedCompositeName = cj.name || tempCompositeFilename;
                     }
                 } catch (e) {}
 
+                // 2) Upload mask to temp (for bridge nodes / re‑edit in this session)
                 try {
-                    const maskFile = dataURLtoFile(maskDataUrl, maskFilename2);
+                    const maskFile = dataURLtoFile(maskDataUrl, tempMaskFilename);
                     const maskForm = new FormData();
                     maskForm.append("image", maskFile);
                     maskForm.append("type", tempType);
@@ -1170,6 +1221,32 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
                         body: maskForm,
                     });
                 } catch (e) {}
+
+                // 3) For non‑RGBYP bridge nodes (e.g. vanilla LoadImage) additionally bake
+                //    the composite into the node's own image file so the output is updated.
+                if (!isRgbypBridgeNode) {
+                    try {
+                        const bakedFileName = compositeFilename || originalFilename;
+                        const bakedFile = dataURLtoFile(compositeDataUrl, bakedFileName);
+                        const bakedForm = new FormData();
+                        bakedForm.append("image", bakedFile);
+                        bakedForm.append("type", imgType || "input");
+                        bakedForm.append("overwrite", "true");
+                        if (imgSubfolder) {
+                            bakedForm.append("subfolder", imgSubfolder);
+                        }
+
+                        await api.fetchApi("/upload/image", {
+                            method: "POST",
+                            body: bakedForm,
+                        });
+
+                        // Try to update widget value so the node uses the baked image on next Run
+                        if (imageWidget && typeof imageWidget.value === "string") {
+                            imageWidget.value = bakedFileName;
+                        }
+                    } catch (e) {}
+                }
 
                 const viewUrl = `/view?filename=${encodeURIComponent(
                     uploadedCompositeName
@@ -1185,7 +1262,9 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
                 if (node.image instanceof Image) {
                     node.image.src = viewUrl;
                 }
-                const randomValue = lastMaskOpacity + (Math.random() * 0.002) - 0.001; 
+
+                // Nudge "updater" float input on our bridge nodes so Python re‑reads temp files
+                const randomValue = lastMaskOpacity + (Math.random() * 0.002) - 0.001;
 
                 if (node.widgets && Array.isArray(node.widgets)) {
                     const w = node.widgets.find(w => w.name === "updater");

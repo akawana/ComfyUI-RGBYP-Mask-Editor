@@ -206,8 +206,8 @@ app.registerExtension({
                     app.graph.setDirtyCanvas(true, true);
                 }
 
-
 /*
+
         const origLoadGraphData = app.loadGraphData;
         app.loadGraphData = async function (data) {
             const result = await origLoadGraphData.call(this, data);
@@ -222,6 +222,7 @@ app.registerExtension({
 
             return result;
         };
-*/
+*/    
     },
+
 });
