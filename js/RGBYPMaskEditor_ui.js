@@ -50,8 +50,13 @@ export function openMaskEditor(node, imageWidget, imageInfo) {
             const originalFilename = imageWidget?.value || imageInfo?.filename || "rgbyp.png";
 
             function stripExt(name) {
+                const s = (name == null) ? "" : String(name);
+                const m = s.match(/^(.*)\.(png|jpg|jpeg|webp|bmp|gif)$/i);
+                return m ? m[1] : s;
+/*
                 const m = name.match(/^(.*)\.(png|jpg|jpeg|webp|bmp|gif)$/i);
                 return m ? m[1] : name;
+*/
             }
 
             let baseFilename;
