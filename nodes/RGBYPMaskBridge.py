@@ -180,6 +180,7 @@ class RGBYPMaskBridge:
 
         # Save meta.json with paths inside temp
         meta = {
+            "graph_image": "",
             "original": original_path,
             "mask": mask_path if has_color_mask and os.path.isfile(mask_path) else "",
             "composite": composite_path if composite_exists else "",
