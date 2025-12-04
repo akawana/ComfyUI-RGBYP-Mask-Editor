@@ -404,8 +404,8 @@ export function openMaskEditor(node) {
     const headerHeight = header.getBoundingClientRect().height;
     helpPanel.style.top = headerHeight + "px";    
 
-    // перекрываем только область под хедером
-    helpPanel.style.display = "none";            // по умолчанию скрыта
+    // cover only the area under the header
+    helpPanel.style.display = "none";            // hidden by default
     helpPanel.style.backgroundColor = "#333";
     helpPanel.style.boxSizing = "border-box";
     helpPanel.style.padding = "20px 40px";

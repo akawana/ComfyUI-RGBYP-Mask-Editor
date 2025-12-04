@@ -23,19 +23,10 @@ class RGBYPMaskBridge:
                 "updater": (
                     "FLOAT",
                     {
-                        "default": 0.75,
-                        "min": 0.001,
-                        "max": 1.0,
-                        "step": 0.001,
-                    },
-                ),
-            },
-            "optional": {
-                "file_path": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "forceInput": True,
+                        "default": 0.7500,
+                        "min": 0.0001,
+                        "max": 1.0000,
+                        "step": 0.0001,
                     },
                 ),
             },
@@ -55,7 +46,7 @@ class RGBYPMaskBridge:
 
     def _get_original_filename_from_tensor(self, image):
         """
-        Пытаемся вытащить исходный путь к файлу из тензора IMAGE.
+        Try to extract the original file path from the IMAGE tensor.
         """
         try:
             meta = getattr(image, "metadata", None)
@@ -70,14 +61,14 @@ class RGBYPMaskBridge:
 
     def _save_tensor_as_png(self, image_tensor, path):
         """
-        Сохраняем IMAGE (B,H,W,C в [0,1]) как PNG по указанному пути.
-        Берём только первый батч.
-        Поддерживаем как RGB, так и RGBA (если C>=4, сохраняем с альфой).
+        Save IMAGE (B,H,W,C in [0,1]) as PNG at the given path.
+        Use only the first batch item.
+        Support both RGB and RGBA (if C>=4, preserve alpha).
         """
         try:
             img0 = image_tensor[0].detach().cpu().clamp(0.0, 1.0)
 
-            # гарантируем минимум 3 канала
+            # ensure at least 3 channels
             if img0.shape[-1] < 3:
                 pad = 3 - img0.shape[-1]
                 img0 = torch.cat([img0, img0[..., :1].repeat(1, 1, pad)], dim=-1)
@@ -97,10 +88,10 @@ class RGBYPMaskBridge:
 
     def _load_mask_tensor(self, mask_path, target_hw, device):
         """
-        Загружаем картинку маски из PNG и приводим к размеру target_hw (H,W).
-        Возвращаем torch.Tensor формы (1,H,W,4) в [0,1] с прозрачным фоном:
-        - пиксели, где маска чёрная (RGB≈0), получают alpha=0;
-        - цветные пиксели маски получают alpha=1.
+        Load mask image from PNG and resize it to target_hw (H,W).
+        Return a torch.Tensor of shape (1,H,W,4) in [0,1] with transparent background:
+        - pixels where mask is black (RGB≈0) get alpha=0;
+        - non-black (colored) mask pixels get alpha=1.
         """
         try:
             m = Image.open(mask_path).convert("RGBA")
@@ -110,17 +101,17 @@ class RGBYPMaskBridge:
 
             arr = np.array(m).astype(np.float32) / 255.0
             if arr.ndim == 2:
-                # серый → дублируем в RGB, alpha затем пересчитаем
+                # grayscale → replicate into RGB, alpha will be recomputed
                 arr = np.stack([arr, arr, arr, np.ones_like(arr)], axis=-1)
 
-            # гарантируем минимум 3 канала
+            # ensure at least 3 channels
             if arr.shape[-1] < 3:
                 pad = 3 - arr.shape[-1]
                 pad_arr = np.repeat(arr[..., :1], pad, axis=-1)
                 arr = np.concatenate([arr, pad_arr], axis=-1)
 
             rgb = arr[..., :3]
-            # alpha: 0 там, где RGB почти чёрный, иначе 1
+            # alpha: 0 where RGB is almost black, otherwise 1
             mag = np.max(rgb, axis=-1)
             alpha = (mag > 1e-3).astype(np.float32)
             rgba = np.concatenate([rgb, alpha[..., None]], axis=-1)
@@ -136,12 +127,12 @@ class RGBYPMaskBridge:
 
     def _bake_composite(self, base_tensor, mask_path_or_none, updater, out_path, device):
         """
-        Делает запечённую картинку:
-        - base_tensor: IMAGE (B,H,W,C) в [0,1]
-        - mask_path_or_none: путь к PNG маски либо None
-        - updater: FLOAT (0..100000) → opacity фактор (0..1)
-        - out_path: полный путь PNG
-        Возвращает True/False.
+        Create a baked composite image:
+        - base_tensor: IMAGE (B,H,W,C) in [0,1]
+        - mask_path_or_none: path to PNG mask or None
+        - updater: FLOAT (0..100000) → opacity factor (0..1)
+        - out_path: full PNG path
+        Return True/False.
         """
         try:
             img0 = base_tensor[0].detach().cpu().clamp(0.0, 1.0)
@@ -161,11 +152,11 @@ class RGBYPMaskBridge:
                     f"[RGBYPMaskBridge] baking with REAL mask '{mask_path_or_none}', size={mask_img.size}"
                 )
             else:
-                # пустая прозрачная "маска 1 пиксель" → по факту нулевая маска
+                # empty transparent '1-pixel mask' → effectively zero mask
                 mask_arr = np.zeros((1, 1, 3), dtype=np.float32)
                 print("[RGBYPMaskBridge] baking with EMPTY mask (no mask file)")
 
-            # приводим маску к размеру base через ресайз
+            # resize the mask to match base size
             if mask_arr.shape[0] != h or mask_arr.shape[1] != w:
                 mask_img = Image.fromarray(
                     (np.clip(mask_arr, 0.0, 1.0) * 255.0).astype(np.uint8), mode="RGB"
@@ -205,7 +196,7 @@ class RGBYPMaskBridge:
         os.makedirs(temp_dir, exist_ok=True)
         os.makedirs(rgbyp_input_dir, exist_ok=True)
 
-        # 1. Имя входной картинки
+        # 1. Input image name
         input_abs_path = self._get_original_filename_from_tensor(image)
         if input_abs_path:
             base_filename = os.path.basename(input_abs_path)
@@ -237,26 +228,26 @@ class RGBYPMaskBridge:
             "height": int(h),
         }
 
-        # 1.3 outputImage = входной image
+        # 1.3 outputImage = input image
         outputImage = image
 
         # 1.4 outputMask = None
         outputMask = None
 
-        # 2. Проверяем существование json
+        # 2. Check if json exists
         json_exists = os.path.isfile(json_path)
         print(f"[RGBYPMaskBridge] json_exists={json_exists}, json_path='{json_path}'")
 
-        # Для превью
+        # For preview
         preview_filename = None
         preview_type = None
         preview_subfolder = ""
 
         if not json_exists:
-            # --- JSON НЕТ ---
+            # --- JSON DOES NOT EXIST ---
             print("[RGBYPMaskBridge] JSON does not exist → create new")
 
-            # сохраняем jsonTemp
+            # save jsonTemp
             try:
                 with open(json_path, "w", encoding="utf-8") as f:
                     json.dump(jsonTemp, f, ensure_ascii=False, indent=2)
@@ -264,17 +255,17 @@ class RGBYPMaskBridge:
             except Exception as e:
                 print(f"[RGBYPMaskBridge] ERROR writing new json: {e}")
 
-            # сохраняем входную картинку как original в temp
+            # save input image as original in temp
             original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
             self._save_tensor_as_png(outputImage, original_temp_path)
 
-            # превью — эта же original-картинка из temp
+            # preview → same original image from temp
             preview_filename = jsonTemp["original"]
             preview_type = "temp"
             preview_subfolder = ""
 
         else:
-            # --- JSON ЕСТЬ ---
+            # --- JSON EXISTS ---
             try:
                 with open(json_path, "r", encoding="utf-8") as f:
                     existing = json.load(f)
@@ -282,7 +273,7 @@ class RGBYPMaskBridge:
                 print(f"[RGBYPMaskBridge] ERROR reading existing json: {e}")
                 existing = {}
 
-            # читаем старые ширину/высоту и mask
+            # read previous width/height and mask fields
             old_w = int(existing.get("width", 0) or 0)
             old_h = int(existing.get("height", 0) or 0)
             mask_name = (existing.get("mask") or "").strip()
@@ -294,21 +285,21 @@ class RGBYPMaskBridge:
             sizes_match = (old_w == int(w)) and (old_h == int(h))
             print(f"[RGBYPMaskBridge] sizes_match={sizes_match}, clear_on_size_change={clear_on_size_change}")
 
-            # имя composite
+            # composite name
             composite_name = f"{imageOriginalName}_rgbyp_composite.png"
             composite_temp_path = os.path.join(temp_dir, composite_name)
             composite_input_path = os.path.join(rgbyp_input_dir, composite_name)
 
-            # начнём с jsonTemp как базового (обновлённые width/height/original)
+            # start with jsonTemp as a base (updated width/height/original)
             jsonData = dict(jsonTemp)
-            # но скопируем sha/mask/composite из existing, если нужно
-            jsonData["mask"] = mask_name  # оставляем старую маску, если была
+            # but copy sha/mask/composite from existing if needed
+            jsonData["mask"] = mask_name  # keep existing mask if it was set
             jsonData["composite"] = existing.get("composite", "")
 
             if sizes_match:
-                # ---------- размеры совпадают ----------
+                # ---------- sizes match ----------
                 if isJsonMask:
-                    # есть маска → печём composite с ней
+                    # mask exists → bake composite using it
                     mask_path = os.path.join(temp_dir, mask_name)
                     print(
                         f"[RGBYPMaskBridge] sizes match & mask exists → bake composite with mask '{mask_path}'"
@@ -317,7 +308,7 @@ class RGBYPMaskBridge:
                         outputImage, mask_path, updater, composite_temp_path, device
                     )
                     if baked:
-                        # Скопировать composite и в input/rgbyp
+                        # Copy composite into input/rgbyp as well
                         try:
                             Image.open(composite_temp_path).save(
                                 composite_input_path, format="PNG"
@@ -332,24 +323,24 @@ class RGBYPMaskBridge:
 
                         jsonData["composite"] = composite_name
 
-                        # outputMask = сама маска
+                        # outputMask = the mask itself
                         outputMask = self._load_mask_tensor(
                             mask_path, (int(h), int(w)), device
                         )
-                        # превью из input/rgbyp
+                        # preview from input/rgbyp
                         preview_filename = composite_name
                         preview_type = "input"
                         preview_subfolder = "rgbyp"
                     else:
                         print("[RGBYPMaskBridge] bake failed, fallback preview to original")
-                        # сохраняем original и используем как превью
+                        # save original and use it as preview
                         original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
                         self._save_tensor_as_png(outputImage, original_temp_path)
                         preview_filename = jsonTemp["original"]
                         preview_type = "temp"
                         preview_subfolder = ""
                 else:
-                    # маски нет → печём composite с пустой маской
+                    # no mask → bake composite with empty mask
                     print(
                         "[RGBYPMaskBridge] sizes match & mask is empty → bake composite with empty mask"
                     )
@@ -369,7 +360,7 @@ class RGBYPMaskBridge:
                                 f"[RGBYPMaskBridge] ERROR copying composite to input/rgbyp: {e}"
                             )
 
-                        jsonData["mask"] = ""  # по ТЗ поле mask остаётся пустым
+                        jsonData["mask"] = ""  # according to spec the mask field stays empty
                         jsonData["composite"] = composite_name
                         preview_filename = composite_name
                         preview_type = "input"
@@ -382,14 +373,14 @@ class RGBYPMaskBridge:
                         preview_type = "temp"
                         preview_subfolder = ""
             else:
-                # ---------- размеры НЕ совпадают ----------
+                # ---------- sizes DO NOT match ----------
                 if clear_on_size_change:
                     print(
                         "[RGBYPMaskBridge] size mismatch & clear_on_size_change=True → reset jsonTemp & preview=input image"
                     )
-                    # jsonTemp уже содержит актуальные width/height/original
+                    # jsonTemp already contains up-to-date width/height/original
                     jsonData = dict(jsonTemp)
-                    # сохраняем jsonTemp
+                    # save jsonTemp
                     try:
                         with open(json_path, "w", encoding="utf-8") as f:
                             json.dump(jsonData, f, ensure_ascii=False, indent=2)
@@ -398,7 +389,7 @@ class RGBYPMaskBridge:
                         print(
                             f"[RGBYPMaskBridge] ERROR writing reset json (size mismatch, clear=True): {e}"
                         )
-                    # сохраняем original в temp
+                    # save original in temp
                     original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
                     self._save_tensor_as_png(outputImage, original_temp_path)
                     preview_filename = jsonTemp["original"]
@@ -411,7 +402,7 @@ class RGBYPMaskBridge:
                     )
                     mask_path = os.path.join(temp_dir, mask_name) if mask_name else None
 
-                    # Сохраняем входную картинку как original в temp с новым именем
+                    # Save input image as original in temp with a new name
                     original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
                     self._save_tensor_as_png(outputImage, original_temp_path)
 
@@ -431,18 +422,18 @@ class RGBYPMaskBridge:
                                 f"[RGBYPMaskBridge] ERROR copying composite to input/rgbyp: {e}"
                             )
 
-                        # сохраняем имя composite и обновлённые размеры
+                        # save composite name and updated dimensions
                         jsonData["composite"] = composite_name
                         jsonData["width"] = int(w)
                         jsonData["height"] = int(h)
 
-                        # outputMask = сама маска, если есть
+                        # outputMask = the mask itself, if present
                         if mask_path and os.path.isfile(mask_path):
                             outputMask = self._load_mask_tensor(
                                 mask_path, (int(h), int(w)), device
                             )
                             if outputMask is not None:
-                                # сохраняем маску в temp с именем imageOriginalName + _rgbyp_mask
+                                # save mask in temp as imageOriginalName + _rgbyp_mask
                                 mask_output_name = f"{imageOriginalName}_rgbyp_mask.png"
                                 mask_output_path = os.path.join(temp_dir, mask_output_name)
                                 self._save_tensor_as_png(outputMask, mask_output_path)
@@ -452,10 +443,10 @@ class RGBYPMaskBridge:
                                     "[RGBYPMaskBridge] WARNING: could not load mask tensor, skip saving resized mask file"
                                 )
                         else:
-                            # маски нет на диске — оставляем поле mask пустым
+                            # no mask file on disk → leave mask field empty
                             jsonData["mask"] = ""
 
-                        # превью — запечённая картинка из input/rgbyp
+                        # preview → baked image from input/rgbyp
                         preview_filename = composite_name
                         preview_type = "input"
                         preview_subfolder = "rgbyp"
@@ -463,14 +454,14 @@ class RGBYPMaskBridge:
                         print(
                             "[RGBYPMaskBridge] bake failed (size mismatch, clear=False), fallback preview to original"
                         )
-                        # на всякий случай сохраняем original (если не сохранился)
+                        # as a safety, save original image (if it was not saved)
                         original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
                         self._save_tensor_as_png(outputImage, original_temp_path)
                         preview_filename = jsonTemp["original"]
                         preview_type = "temp"
                         preview_subfolder = ""
 
-            # в любом случае после всех веток – сохраняем jsonData
+            # in all cases after the branches → save jsonData
             try:
                 with open(json_path, "w", encoding="utf-8") as f:
                     json.dump(jsonData, f, ensure_ascii=False, indent=2)
@@ -478,8 +469,8 @@ class RGBYPMaskBridge:
             except Exception as e:
                 print(f"[RGBYPMaskBridge] ERROR writing final json: {e}")
 
-        # 3. Выходы ноды
-        # 3.1 rgbyp_mask: если outputMask=None → чёрная 64x64
+        # 3. Node outputs
+        # 3.1 rgbyp_mask: if outputMask=None → black 64x64 mask
         if outputMask is None:
             print(
                 "[RGBYPMaskBridge] outputMask is None → using default black 64x64 mask"
@@ -491,7 +482,7 @@ class RGBYPMaskBridge:
                 .unsqueeze(0)
             )
 
-        # Превью
+        # Preview
         ui = None
         if preview_filename is not None and preview_type is not None:
             ui = {

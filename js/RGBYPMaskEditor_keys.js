@@ -30,10 +30,10 @@ const closeEditor = () => {
     const dialog = state.dialogElement;
     const overlay = state.overlayDialog;
 
-    // снимаем все глобальные хоткеи
+    // translated comment
     unregisterKeyHandlers(dialog);
 
-    // убираем оверлей из DOM
+    // translated comment
     if (overlay && overlay.parentNode) {
         overlay.parentNode.removeChild(overlay);
     }
@@ -62,7 +62,7 @@ async function onKeyDownStub(e) {
 
 
     // Space  : temporary pan
-    // Space / Shift+Space : временный Scroll (hand)
+    // translated comment
     if (e.code === "Space") {
         if (state && !state.spaceScrollActive) {
             state.spaceScrollActive = true;
@@ -82,11 +82,11 @@ async function onKeyDownStub(e) {
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
 
-        // зум от центра панели
+        // translated comment
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        // deltaY > 0 => отдалить (как колесо вниз)
+        // translated comment
         applyZoomAt(state, cx, cy, +100);
 
         e.preventDefault();
@@ -104,14 +104,14 @@ async function onKeyDownStub(e) {
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        // deltaY < 0 => приблизить (как колесо вверх)
+        // translated comment
         applyZoomAt(state, cx, cy, -100);
 
         e.preventDefault();
         return;
     }
 
-    // --- SHIFT+V : циклические авто-маски ---
+    // translated comment
     if (e.code === "KeyV" && e.shiftKey) {
         if (!state) return;
 
@@ -126,7 +126,7 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    // --- ESC: закрыть диалог ---
+    // translated comment
     if (e.key === "Escape") {
         console.log("[RGBYP] ESC pressed: closing dialog without saving");
         closeEditor();
@@ -134,10 +134,10 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    // Enter : save + закрыть
+    // translated comment
     if (e.key === "Enter") {
         try {
-            // если saveMask async — промис просто улетит, нам не критично
+            // translated comment
             await saveMask();
             updatePreview();
         } catch (err) {
@@ -167,7 +167,7 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    // Shift+D — увеличить кисть
+    // translated comment
     if (e.code === "KeyD" && e.shiftKey) {
         adjustBrushSizeByStep(1);
         e.preventDefault();
@@ -208,19 +208,19 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     const prevCssH = parseFloat(container.style.height) || rect.height;
     if (!prevCssW || !prevCssH) return;
 
-    // координаты точки зума внутри контейнера
+    // translated comment
     const xOnCanvas = centerClientX - rect.left;
     const yOnCanvas = centerClientY - rect.top;
     const relX = xOnCanvas / prevCssW;
     const relY = yOnCanvas / prevCssH;
 
-    // базовый размер для вычисления масштаба
+    // translated comment
     if (!state.zoomPrevWidth || !state.zoomPrevHeight) {
         state.zoomPrevWidth = prevCssW;
         state.zoomPrevHeight = prevCssH;
     }
 
-    // колесо вверх (deltaY < 0) — приблизить, вниз — отдалить
+    // translated comment
     const factor = deltaY < 0 ? 1.1 : 1 / 1.1;
 
     const oldZoom = state.zoom || 1;
@@ -247,8 +247,8 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     panel.scrollLeft += dx;
     panel.scrollTop += dy;
 
-    // после изменения размеров и скролла контейнера
-    // пересчитываем положение кругового курсора под тем же clientX/clientY
+    // translated comment
+    // translated comment
     if (cursorEvent) {
         updateBrushCursor(cursorEvent);
     }
@@ -259,7 +259,7 @@ function onWheelZoom(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state) return;
 
-    // чтобы страница не скроллилась
+    // translated comment
     e.preventDefault();
 
     applyZoomAt(state, e.clientX, e.clientY, e.deltaY, e);
@@ -288,7 +288,7 @@ function getCanvasCoords(e, canvas) {
     return { x, y };
 }
 
-// Нажатие кнопки мыши — начало рисования
+// translated comment
 function onMaskMouseDown(e) {
     const state = getNodeState(GP.baseNode.id);
     if (state.currentTool === "Scroll") {
@@ -296,19 +296,19 @@ function onMaskMouseDown(e) {
         return;
     }
 
-    // запоминаем режим
-    // запоминаем режим
+    // translated comment
+    // translated comment
     if (state.currentTool === "Erase") {
         state.drawMode = "Erase";
     } else {
-        // по умолчанию brush, плюс можно оставить ПКМ как erase
+        // translated comment
         state.drawMode = (e.button === 2) ? "Erase" : "Paint";
     }
 
     const canvas = state.maskCanvas;
     if (!canvas) return;
 
-    // ЛКМ = рисование, ПКМ = стирание, остальные игнорируем
+    // translated comment
     if (e.button !== 0 && e.button !== 2) return;
 
     e.preventDefault();
@@ -321,7 +321,7 @@ function onMaskMouseDown(e) {
 
     const ctx = canvas.getContext("2d");
 
-    // настраиваем режим в зависимости от кисти / ластика
+    // translated comment
     if (state.drawMode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
         ctx.strokeStyle = "rgba(0,0,0,1)";
@@ -344,7 +344,7 @@ function onMaskMouseDown(e) {
     onMaskDraw(e);
 }
 
-// Движение мыши — собственно рисование
+// translated comment
 function onMaskDraw(e) {
     const state = getNodeState(GP.baseNode.id);
     const canvas = state.maskCanvas;
@@ -366,7 +366,7 @@ function onMaskDraw(e) {
 
     const mode = state.drawMode || "Paint";
 
-    // выбор цвета
+    // translated comment
 
     if (mode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
@@ -390,7 +390,7 @@ function onMaskDraw(e) {
     state.drawLastY = y;
 }
 
-// Отпускание кнопки / уход мыши — конец рисования
+// translated comment
 function onMaskMouseUp(e) {
     const state = getNodeState(GP.baseNode.id);
     const canvas = state.maskCanvas;
@@ -402,7 +402,7 @@ function onMaskMouseUp(e) {
     if (state.isDrawing) {
         const ctx = canvas.getContext("2d");
         ctx.closePath();
-        // возвращаем стандартный режим
+        // translated comment
         ctx.globalCompositeOperation = "source-over";
     }
     state.isDrawing = false;
@@ -410,7 +410,7 @@ function onMaskMouseUp(e) {
 }
 
 function onMaskContextMenu(e) {
-    // отключаем стандартное меню браузера по ПКМ
+    // translated comment
     e.preventDefault();
 }
 
@@ -436,7 +436,7 @@ function adjustMaskOpacityByStep(direction) {
     let alpha = state.maskOpacity;
     if (alpha == null || isNaN(alpha)) alpha = 1;
 
-    const step = 0.05; // шаг по хоткеям
+    const step = 0.05; // translated comment
     alpha += direction * step;
     alpha = clampMaskOpacity(alpha);
 
@@ -446,12 +446,12 @@ function adjustMaskOpacityByStep(direction) {
     if (state.opacitySlider) {
         const v = Math.round(alpha * 100);
         state.opacitySlider.value = String(v);
-        // дёргаем input, чтобы UI (подпись) тоже обновился
+        // translated comment
         state.opacitySlider.dispatchEvent(new Event("input", { bubbles: true }));
     }
 }
 
-// ----------------- КУРСОР-КИСТЬ -----------------
+// translated comment
 
 function clampBrushSize(size) {
     return Math.max(1, Math.min(size, 300));
@@ -472,13 +472,13 @@ function adjustBrushSizeByStep(direction) {
 
     state.brushSize = size;
 
-    // обновление ползунка
+    // translated comment
     if (state.brushSlider) {
         state.brushSlider.value = String(size);
         state.brushSlider.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
-    // обновление курсора, если он есть
+    // translated comment
     if (state.lastCursorClientX != null) {
         updateBrushCursor({
             clientX: state.lastCursorClientX,
@@ -510,7 +510,7 @@ function updateBrushCursor(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // 🔹 Запоминаем последние координаты мыши
+    // translated comment
     state.lastCursorClientX = e.clientX;
     state.lastCursorClientY = e.clientY;
 
@@ -579,7 +579,7 @@ function onPanMouseDown(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !state.centralPanel) return;
 
-    // пан только в режиме Scroll (кнопка или Space)
+    // translated comment
     if (state.currentTool !== "Scroll") return;
     if (e.button !== 0) return;
 
@@ -622,38 +622,38 @@ function applyAutoMask(state, modeIndex) {
     const h = canvas.height;
     if (!w || !h) return;
 
-    // очистить текущую маску
+    // translated comment
     ctx.clearRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
 
-    // цвета маски
+    // translated comment
     const RED = "rgba(255,0,0,1)";
     const GREEN = "rgba(0,255,0,1)";
     const BLUE = "rgba(0,0,255,1)";
 
     if (modeIndex === 0) {
-        // Half: слева R, справа G
+        // translated comment
         const mid = w / 2;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, mid, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(mid, 0, w - mid, h);
     } else if (modeIndex === 1) {
-        // 1 : 2 — слева 1/3 R, справа 2/3 G
+        // translated comment
         const x1 = w / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, x1, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(x1, 0, w - x1, h);
     } else if (modeIndex === 2) {
-        // 2 : 1 — слева 2/3 R, справа 1/3 G
+        // translated comment
         const x2 = (w * 2) / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, x2, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(x2, 0, w - x2, h);
     } else if (modeIndex === 3) {
-        // Thirds — три равные части: R | G | B
+        // translated comment
         const step = w / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, step, h);
@@ -674,11 +674,11 @@ export function registerKeyHandlers(scopeElement) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !scopeElement) return;
 
-    // --- ГЛОБАЛЬНЫЕ КЛАВИШИ ---
+    // translated comment
     window.addEventListener("keydown", onKeyDownStub);
     window.addEventListener("keyup", onKeyUpStub);
 
-    // --- ZOOM / PAN по центральной панели ---
+    // translated comment
     const panel = state.centralPanel;
     if (panel) {
         panel.onwheel = (e) => onWheelZoom(e);     // zoom
@@ -688,7 +688,7 @@ export function registerKeyHandlers(scopeElement) {
         panel.onmouseleave = onPanMouseUp;
     }
 
-    // --- РИСОВАНИЕ / СТИРАНИЕ НА МАСКЕ ---
+    // translated comment
     const mask = state.maskCanvas;
     if (mask) {
         mask.onmousedown = onMaskMouseDown;
@@ -699,7 +699,7 @@ export function registerKeyHandlers(scopeElement) {
         mask.oncontextmenu = onMaskContextMenu;
     }
 
-    // --- КРУГЛЫЙ КУРСОР-КИСТЬ ---
+    // translated comment
     const cont = state.canvasContainer;
     if (cont) {
         cont.onmousemove = onBrushCursorMove;
@@ -708,7 +708,7 @@ export function registerKeyHandlers(scopeElement) {
         cont.style.cursor = "none";
     }
 
-    // --- СЛАЙДЕРЫ (0 — brush size, 1 — opacity) ---
+    // translated comment
     const sliders = scopeElement.querySelectorAll('input[type="range"]');
 
     // Brush size
@@ -716,7 +716,7 @@ export function registerKeyHandlers(scopeElement) {
         const brushSlider = sliders[0];
         state.brushSlider = brushSlider;
 
-        // инициализация из state или из дефолта
+        // translated comment
         if (state.brushSize == null) {
             state.brushSize = clampBrushSize(parseInt(brushSlider.value) || 50);
         } else {
@@ -767,7 +767,7 @@ export function registerKeyHandlers(scopeElement) {
         };
     }
 
-    // --- HELP PANEL (кнопка ? и кнопка Close) ---
+    // translated comment
     if (state.helpIcon && state.helpPanel) {
         state.helpIcon.onclick = () => {
             state.helpPanel.style.display = "flex";
@@ -797,13 +797,13 @@ export function registerKeyHandlers(scopeElement) {
     if (scrollBtn) scrollBtn.onclick = onToolButtonClick;
     if (clearBtn) clearBtn.onclick = onToolButtonClick;
 
-    // дефолтный режим
+    // translated comment
     if (!state.currentTool) {
         state.currentTool = "Brush";
     }
     updateToolButtonsHighlight(state.currentTool);
 
-    // --- COLOR BUTTONS (клики по цветам) ---
+    // translated comment
     if (state.colorButtons && Array.isArray(state.colorButtons)) {
         state.colorButtons.forEach((btn, idx) => {
             btn.onclick = () => {
@@ -886,7 +886,7 @@ export function unregisterKeyHandlers(scopeElement) {
     window.removeEventListener("keydown", onKeyDownStub);
     window.removeEventListener("keyup", onKeyUpStub);
 
-    // остальное можно не чистить — overlay удалится из DOM,
-    // и все onmousemove/onmousedown/oninput уйдут вместе с ним.
+    // translated comment
+    // translated comment
 }
 

@@ -47,7 +47,7 @@ export function initBaseImageAndCanvas() {
         return;
     }
 
-    // src из ноды (fallback, если json не подойдёт)
+    // src from node (fallback if json is not suitable)
     let fallbackSrc = null;
     if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0 && node.imgs[0]?.src) {
         fallbackSrc = node.imgs[0].src;
@@ -64,7 +64,7 @@ export function initBaseImageAndCanvas() {
         const metaFilename = `rgbyp_${node.id}.json`;
         let meta = null;
 
-        // --- 1. Пробуем прочитать meta json из temp ---
+        // --- 1. Try to read meta json from temp ---
         try {
             const metaUrl = `/view?filename=${encodeURIComponent(metaFilename)}&type=temp&_t=${Date.now()}`;
             const resp = await api.fetchApi(metaUrl, { method: "GET" });
@@ -84,12 +84,12 @@ export function initBaseImageAndCanvas() {
             console.warn("[RGBYP] initBaseImageAndCanvas: error loading meta", e);
         }
 
-        // --- 2. Если meta есть — проверяем, что она относится к текущей картинке ---
+        // --- 2. If meta exists — check that it belongs to the current image ---
         if (meta && typeof meta.original === "string") {
             const currentFilename = getNodeImageFilename(node) || "";
             const originalFilename = meta.original || "";
 
-            // вырезаем постфиксы
+            // cut postfixes
             const normalizedCurrent = currentFilename
                 ? currentFilename.replace(/_rgbyp_composite.*?(?=\.)/, "")
                 : "";
@@ -105,14 +105,14 @@ export function initBaseImageAndCanvas() {
                 meta = null;
             }
         } else {
-            // meta нет или нет original — считаем, что работать по json нельзя
+            // meta is missing or has no original — treat json as unusable
             meta = null;
         }
 
         let baseImg = null;
         let maskImg = null;
 
-        // --- 3. Если meta валидна и принадлежит этой картинке — берём original/mask из temp ---
+        // --- 3. If meta is valid and belongs to this image — take original/mask from temp ---
         if (meta && meta.original) {
             try {
                 const originalUrl = `/view?filename=${encodeURIComponent(meta.original)}&type=temp&_t=${Date.now()}`;
@@ -122,7 +122,7 @@ export function initBaseImageAndCanvas() {
                 baseImg = null;
             }
 
-            // mask может быть пустой строкой → в этом случае делаем чистую маску
+            // mask may be an empty string → in that case we start with a clean mask
             const maskFile = (typeof meta.mask === "string" ? meta.mask.trim() : "");
             if (maskFile) {
                 try {
@@ -138,7 +138,7 @@ export function initBaseImageAndCanvas() {
             }
         }
 
-        // --- 4. Если baseImg так и не получили — грузим из ноды, как раньше ---
+        // --- 4. If baseImg is still not loaded — load from node as before ---
         if (!baseImg) {
             try {
                 baseImg = await loadImageFromUrl(fallbackSrc);
@@ -148,7 +148,7 @@ export function initBaseImageAndCanvas() {
             }
         }
 
-        // --- 5. Запоминаем в state ---
+        // --- 5. Store in state ---
         state.baseImg = baseImg;
         if (maskImg) {
             state.maskImg = maskImg;
@@ -164,12 +164,12 @@ export function initBaseImageAndCanvas() {
         const prevDisplayH = containerDiv.clientHeight || containerDiv.height || imgH;
         console.log("[RGBYP] Previous container size:", prevDisplayW, prevDisplayH);
 
-        // базовый размер для зума
+        // base size for zoom
         state.zoomPrevWidth = prevDisplayW;
         state.zoomPrevHeight = prevDisplayH;
         state.zoom = 1;
 
-        // внутреннее разрешение канвасов = размеру картинки
+        // internal canvas resolution = image size
         containerDiv.style.width = imgW + "px";
         containerDiv.style.height = imgH + "px";
 
@@ -178,19 +178,19 @@ export function initBaseImageAndCanvas() {
         state.maskCanvas.width = imgW;
         state.maskCanvas.height = imgH;
 
-        // --- 6. Рисуем оригинал ---
+        // --- 6. Draw original ---
         const octx = state.originalCanvas.getContext("2d");
         octx.clearRect(0, 0, imgW, imgH);
         octx.drawImage(baseImg, 0, 0);
 
-        // --- 7. Рисуем маску, если она есть; иначе маска остаётся чистой ---
+        // --- 7. Draw mask if it exists; otherwise leave mask clean ---
         const mctx = state.maskCanvas.getContext("2d");
         mctx.clearRect(0, 0, imgW, imgH);
         if (maskImg) {
             mctx.drawImage(maskImg, 0, 0);
         }
 
-        // --- 8. Fit по "contain" в centralPanel (как и раньше) ---
+        // --- 8. Fit by "contain" into centralPanel (same as before) ---
         const outerContainer = state.centralPanel || containerDiv.parentElement;
         const boxW = outerContainer?.clientWidth || prevDisplayW;
         const boxH = outerContainer?.clientHeight || prevDisplayH;
@@ -214,7 +214,7 @@ export function initBaseImageAndCanvas() {
 }
 
 function getNodeImageFilename(node) {
-    // Пытаемся вытащить имя файла из src
+    // Try to extract the file name from src
     let src = null;
 
     if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0 && node.imgs[0]?.src) {
@@ -226,7 +226,7 @@ function getNodeImageFilename(node) {
     if (!src) return null;
 
     try {
-        // src обычно вида /view?filename=xxx.png&type=...
+        // src is usually like /view?filename=xxx.png&type=...
         const url = new URL(src, window.location.origin);
         const fromParam = url.searchParams.get("filename");
 
@@ -236,7 +236,7 @@ function getNodeImageFilename(node) {
         return pathParts[pathParts.length - 1] || null;
     } catch (e) {
         console.warn("[RGBYP] getNodeImageFilename: failed to parse src", src, e);
-        // на крайний случай — грубый парсинг
+        // as a last resort — rough parsing
         const idx = src.indexOf("filename=");
         if (idx >= 0) {
             const rest = src.slice(idx + "filename=".length);
@@ -250,10 +250,10 @@ function getNodeImageFilename(node) {
 async function uploadComfyFile(file, type = "temp", subfolder) {
     const form = new FormData();
     form.append("image", file);
-    form.append("type", type);      // <-- ВАЖНО: type в FORM, не в URL
+    form.append("type", type);      // IMPORTANT: type in FORM, not in URL
     if (subfolder)
         form.append("subfolder", subfolder);
-    form.append("overwrite", "true"); // чтобы перезаписывать файлы с тем же именем
+    form.append("overwrite", "true"); // to overwrite files with the same name
 
     try {
         const resp = await api.fetchApi("/upload/image", {
@@ -275,7 +275,7 @@ async function uploadComfyFile(file, type = "temp", subfolder) {
         }
 
         console.log("[RGBYP] uploadComfyFile OK:", file.name, "->", info);
-        // info обычно вида { name, subfolder, type: 'temp' }
+        // info is usually { name, subfolder, type: 'temp' }
         return info;
     } catch (err) {
         console.error("[RGBYP] uploadComfyFile error:", err);
@@ -304,7 +304,7 @@ export async function saveMask() {
         return;
     }
 
-    // ---------- 1. Определяем имя исходной картинки из ноды ----------
+    // ---------- 1. Determine the name of the original image from the node ----------
     const graphImageFilename = getNodeImageFilename(node);
     if (!graphImageFilename) {
         console.warn("[RGBYP] saveMask: cannot determine graph image filename");
@@ -315,28 +315,28 @@ export async function saveMask() {
     const baseName = dot >= 0 ? graphImageFilename.slice(0, dot) : graphImageFilename;
     const ext = ".png";
 
-    // Имена файлов по умолчанию (для нового случая)
+    // Default file names (for the new case)
     const desiredOriginalName = `${baseName}_rgbyp_original${ext}`;
     const desiredMaskName = `${baseName}_rgbyp_mask${ext}`;
     const desiredCompositeName = `${baseName}_rgbyp_composite${ext}`;
 
-    // Имя JSON по id ноды
+    // JSON name by node id
     const metaFilename = `rgbyp_${node.id}.json`;
 
     console.log("[****] saveMask: determined filenames:", { metaFilename, desiredOriginalName, desiredMaskName, desiredCompositeName });
 
-    // ---------- 2. Пробуем прочитать существующий meta JSON ----------
+    // ---------- 2. Try to read existing meta JSON ----------
     let meta = null;
     let reuseExistingNames = false;
 
     try {
         const url = `/view?filename=${encodeURIComponent(metaFilename)}&type=temp&_t=${Date.now()}`;
-        // SHA не трогаем — загрузка meta нам не нужна для sha
+        // SHA is not touched — loading meta is not needed for sha
     } catch (e) {
         console.warn("[RGBYP] saveMask: error loading meta", e);
     }
 
-    // ---------- 3. Решаем: обновление или новый набор файлов ----------
+    // ---------- 3. Decide: update or new set of files ----------
     let originalName = desiredOriginalName;
     let maskName = desiredMaskName;
     let compositeName = desiredCompositeName;
@@ -354,7 +354,7 @@ export async function saveMask() {
         }
     }
 
-    // ---------- 4. Сохранение original (только если НОВЫЙ набор) ----------
+    // ---------- 4. Save original (only if this is a NEW set) ----------
     if (!reuseExistingNames) {
         const tmpCanvas = document.createElement("canvas");
         tmpCanvas.width = baseImg.naturalWidth || baseImg.width;
@@ -367,19 +367,19 @@ export async function saveMask() {
         const originalFile = dataURLtoFile(originalDataUrl, originalName);
         await uploadComfyFile(originalFile, "temp");
 
-        // ❌ УДАЛЕНО: вычисление SHA
+        // ❌ REMOVED: SHA calculation
         // const sha = await computeSHA1FromImage(baseImg);
 
         console.log("[RGBYP] saveMask: original saved", originalName);
     }
 
-    // ---------- 5. Сохранение mask ----------
+    // ---------- 5. Save mask ----------
     const maskDataUrl = maskCanvas.toDataURL("image/png");
     const maskFile = dataURLtoFile(maskDataUrl, maskName);
     await uploadComfyFile(maskFile, "temp");
     console.log("[RGBYP] saveMask: mask saved", maskName);
 
-    // ---------- 6. Сохранение composite ----------
+    // ---------- 6. Save composite ----------
     const compCanvas = document.createElement("canvas");
     const w = originalCanvas.width;
     const h = originalCanvas.height;
@@ -405,13 +405,13 @@ export async function saveMask() {
     await uploadComfyFile(compositeFile, "input", "rgbyp");
     console.log("[RGBYP] saveMask: composite saved", compositeName, "opacity =", state.maskOpacity);
 
-    // ---------- 7. Сохранение / обновление meta JSON ----------
+    // ---------- 7. Save / update meta JSON ----------
     if (!reuseExistingNames) {
         const imgW = baseImg.naturalWidth || baseImg.width || originalCanvas.width;
         const imgH = baseImg.naturalHeight || baseImg.height || originalCanvas.height;
 
         const metaObj = {
-            // ❌ SHA УДАЛЁН
+            // ❌ SHA REMOVED
             original: originalName,
             mask: maskName,
             composite: compositeName,
@@ -440,7 +440,7 @@ export async function saveMask() {
         console.log("[RGBYP] saveMask: meta json left unchanged", metaFilename);
     }
 
-    // ---------- 8. Пишем пути в state для updatePreview ----------
+    // ---------- 8. Write paths into state for updatePreview ----------
 }
 
 export function dataURLtoFile(dataUrl, filename) {
@@ -458,15 +458,15 @@ export function dataURLtoFile(dataUrl, filename) {
 
 
 /**
- * Делает запечённую картинку (оригинал + маска с учётом maskOpacity)
- * и готовит файл с правильным именем:
+ * Makes a baked image (original + mask with respect to maskOpacity)
+ * and prepares a file with the correct name:
  *   <original>_rgbyp_composite.png
- * или, если уже есть постфикс, то оставляет как есть.
+ * or, if there is already a postfix, keeps it as is.
  *
- * Плюс здесь же можно (и логично) обновить превью в питон-ноде.
+ * Also, it is logical to update the preview in the python node here.
  *
- * Возвращает объект { file, filename } на случай, если захочешь
- * дальше использовать в saveMask или ещё где-то.
+ * Returns an object { file, filename } in case you want
+ * to keep using it in saveMask or somewhere else.
  */
 export async function updatePreview() {
     const node = GP.baseNode;
@@ -489,14 +489,14 @@ export async function updatePreview() {
         return;
     }
 
-    // Определяем, наша ли это нода
+    // Determine whether this node is ours
     const nodeType =
         (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
     const isOurNode =
         nodeType === "RGBYPMaskBridge" ||
         nodeType === "LoadImageWithFileData";
 
-    // URL для превью (как было раньше)
+    // URL for preview (as before)
     const viewUrl =
         "/view?filename=" +
         compositeName +
@@ -508,7 +508,7 @@ export async function updatePreview() {
     console.log("[updatePreview] updatePreview: loading composite from", viewUrl);
 
     img.onload = () => {
-        // ✅ СТАРАЯ ЛОГИКА — обновляем превью ноды
+        // ✅ OLD LOGIC — update node preview
         node.img = img;
         if (Array.isArray(node.imgs)) {
             node.imgs[0] = img;
@@ -522,11 +522,11 @@ export async function updatePreview() {
 
         console.log("[updatePreview] updatePreview: preview updated successfully", viewUrl);
 
-        // ✅ ДОП. ЛОГИКА ТОЛЬКО ДЛЯ ЧУЖИХ НОД
+        // ✅ EXTRA LOGIC ONLY FOR FOREIGN NODES
         if (!isOurNode) {
-            // Для простых нод типа Load Image:
-            // кладём запечённую картинку в widget "image",
-            // чтобы на выход шла уже composite-картинка из temp.
+            // For simple nodes like Load Image:
+            // put baked image into widget "image",
+            // so that the output uses composite image from temp.
             const annotatedPath = `rgbyp/${compositeName}`;
 
             if (Array.isArray(node.widgets)) {
@@ -545,11 +545,11 @@ export async function updatePreview() {
                     );
                     imageWidget.value = annotatedPath;
 
-                    // Если у виджета есть callback — даём ему шанс отреагировать
+                    // If the widget has a callback — give it a chance to react
                     try {
                         if (typeof imageWidget.callback === "function") {
-                            // Сигнатуру у разных виджетов чуть-чуть гуляет, но
-                            // большинство спокойно переварит такой вызов.
+                            // Signature varies a bit between widgets, but
+                            // most will accept this call.
                             imageWidget.callback(imageWidget.value, app, node, imageWidget);
                         }
                     } catch (e) {
@@ -572,8 +572,8 @@ export async function updatePreview() {
         }
 
         // ------------------------------------------------------------
-        // 🔧 ДОП. ЛОГИКА: если у ноды есть FLOAT-виджет "updater",
-        // то обновляем его значением opacity + случайное число
+        // 🔧 EXTRA LOGIC: if the node has a FLOAT widget "updater",
+        // then update it with opacity + random number
         // ------------------------------------------------------------
         if (Array.isArray(node.widgets)) {
             const updaterWidget = node.widgets.find(
@@ -593,10 +593,10 @@ export async function updatePreview() {
                 let newVal = oldVal;
                 let attempts = 0;
 
-                // крутим рандом пока новое значение совпадает со старым
-                // (на всякий случай ограничиваемся 10 попытками)
+                // keep generating random values while the new value equals the old one
+                // (just in case, limit to 100 attempts)
                 while (newVal === oldVal && attempts < 100) {
-                    rnd = (Math.random() * 0.02) - 0.01; // от -0.001 до +0.001
+                    rnd = (Math.random() * 0.02) - 0.01; // from -0.001 to +0.001
                     newVal = state.maskOpacity + rnd;
                     attempts++;
                 }

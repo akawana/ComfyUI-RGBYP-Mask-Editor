@@ -88,7 +88,7 @@ async function tryUpdateCompositePreviewForNode(node) {
         return false;
     }
 
-    // Берём текущую картинку из node.img или node.imgs[0]
+    // Take the current image from node.img or node.imgs[0]
     let currentImg = node.img;
     if (!currentImg && Array.isArray(node.imgs) && node.imgs.length > 0) {
         currentImg = node.imgs[0];
@@ -102,7 +102,7 @@ async function tryUpdateCompositePreviewForNode(node) {
     const src = currentImg.src;
     console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: current src='${src}'`);
 
-    // Пытаемся вытащить filename из query-параметров (view?filename=...)
+    // Try to extract filename from query parameters (view?filename=...)
     let filename = null;
     try {
         const url = new URL(src, window.location.origin);
@@ -110,7 +110,7 @@ async function tryUpdateCompositePreviewForNode(node) {
         if (qFilename) {
             filename = decodeURIComponent(qFilename);
         } else {
-            // запасной вариант: берём всё после последнего "/"
+            // fallback option: take everything after the last "/"
             const parts = url.pathname.split("/");
             filename = parts[parts.length - 1] || null;
         }
@@ -131,12 +131,12 @@ async function tryUpdateCompositePreviewForNode(node) {
 
     console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: resolved filename='${filename}'`);
 
-    // Если файл уже композит, просто используем его же
+    // If the file is already composite, just use it as is
     let compositeFilename;
     if (filename.toLowerCase().endsWith("_rgbyp_composite.png")) {
         compositeFilename = filename;
     } else {
-        // убираем расширение и добавляем постфикс _rgbyp_composite.png
+        // remove extension and add the postfix _rgbyp_composite.png
         const dot = filename.lastIndexOf(".");
         const baseName = dot >= 0 ? filename.slice(0, dot) : filename;
         compositeFilename = `${baseName}_rgbyp_composite.png`;
@@ -146,7 +146,7 @@ async function tryUpdateCompositePreviewForNode(node) {
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: composite filename candidate='${compositeFilename}'`
     );
 
-    // URL для проверки и загрузки composite из input/rgbyp
+    // URL for checking and loading composite from input/rgbyp
     const compositeUrl = `/view?filename=${encodeURIComponent(
         compositeFilename
     )}&type=input&subfolder=rgbyp&_t=${Date.now()}`;
@@ -155,7 +155,7 @@ async function tryUpdateCompositePreviewForNode(node) {
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: checking composite URL='${compositeUrl}'`
     );
 
-    // Пробуем запросить картинку; если 404 — значит ещё нет композита
+    // Try to request the image; if 404 — composite does not exist yet
     let resp;
     try {
         resp = await fetch(compositeUrl, { method: "GET" });
@@ -178,7 +178,7 @@ async function tryUpdateCompositePreviewForNode(node) {
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: composite EXISTS → updating node preview`
     );
 
-    // Мы не будем использовать resp.body, просто создаём Image с тем же URL
+    // We will not use resp.body, we just create an Image with the same URL
     const img = new Image();
     img.src = compositeUrl;
 

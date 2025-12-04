@@ -13,7 +13,7 @@ export const GP = {
 
 export function setNodeState(nodeId, partial) {
     const state = getNodeState(nodeId);
-    Object.assign(state, partial);   // обновляет только указанные поля
+    Object.assign(state, partial);   // updates only the specified fields
     GP.nodes.set(nodeId, state);
 };
 
