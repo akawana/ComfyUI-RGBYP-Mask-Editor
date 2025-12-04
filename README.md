@@ -20,6 +20,8 @@ The editor works on any image node (Load Image, Preview, etc.), but the package 
 The editor opens from the **Right-Click menu** on nodes containing images.  
 The menu entry appears near the top.
 
+<img src="preview_menu.jpg" />
+
 ### Keyboard Shortcuts
 - **1, 2, 3, 4, 5** — switch color. Also works with SHIFT+number
 - **SHIFT + A / D** — brush size  
@@ -49,6 +51,8 @@ Fill the mask horizontally:
 - Split 1:2  
 - Split 2:1  
 - Split into thirds  
+
+<img src="preview_editor.jpg" width="100%"/>
 
 ---
 
@@ -106,6 +110,15 @@ Save the generated mask manually to your output folder and load it again in the 
 
 ---
 
+<img src="preview_regular_node.jpg" width="100%"/>
+If you use the standard ComfyUI nodes, you will get a baked image with the mask already applied. This means that when splitting by colors, you may end up with dirty or contaminated areas on the masks.
+
+<img src="preview_loader.jpg" width="100%"/>
+If you use my RGBYP Load Image node, you will have a separate output for the RGBYP mask, and the color separation will be clean.
+
+<img src="preview_bridge.jpg" width="100%"/>
+RGBYP Mask Bridge is designed for more complex workflows. You can feed any image into it, edit the mask, and the rgbyp_mask output will give you a clean mask.
+
 ## Installation
 
 You can install this extension in two ways:
@@ -121,4 +134,6 @@ Select the extension and click **Install**.
 ```bash
 cd ComfyUI/custom_nodes
 git clone https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor.git
+
+
 
