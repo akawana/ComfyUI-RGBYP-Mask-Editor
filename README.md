@@ -109,15 +109,14 @@ The RGBYP mask is just an image.
 Save the generated mask manually to your output folder and load it again in the next session.
 
 ---
-
-<img src="preview_regular_node.jpg" width="100%"/>
 If you use the standard ComfyUI nodes, you will get a baked image with the mask already applied. This means that when splitting by colors, you may end up with dirty or contaminated areas on the masks.
+<img src="preview_regular_node.jpg" width="100%"/>
 
-<img src="preview_loader.jpg" width="100%"/>
 If you use my RGBYP Load Image node, you will have a separate output for the RGBYP mask, and the color separation will be clean.
+<img src="preview_loader.jpg" width="100%"/>
 
-<img src="preview_bridge.jpg" width="100%"/>
 RGBYP Mask Bridge is designed for more complex workflows. You can feed any image into it, edit the mask, and the rgbyp_mask output will give you a clean mask.
+<img src="preview_bridge.jpg" width="100%"/>
 
 ## Installation
 
