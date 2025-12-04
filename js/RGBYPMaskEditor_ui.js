@@ -1,1320 +1,470 @@
-import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
-import { dataURLtoFile } from "./RGBYPMaskEditor_io.js";
+import { registerKeyHandlers, unregisterKeyHandlers } from "./RGBYPMaskEditor_keys.js";
+import { initBaseImageAndCanvas } from "./RGBYPMaskEditor_io.js";
+import { GP } from "./RGBYPMaskEditor.js";
+import { getNodeState } from "./RGBYPMaskEditor.js";
+import { setNodeState } from "./RGBYPMaskEditor.js";
+import { HELP } from "./RGBYPMaskEditor.js";
 
-let lastBrushSize = 50;
-let lastBrushColor = [255, 0, 0];
-let lastMaskOpacity = 75;
+const extensionBaseUrl = "/extensions/ComfyUI-RGBYP-Mask-Editor/";
+export const colorListRGB = [
+    { name: "R", color: [255, 0, 0] },
+    { name: "G", color: [0, 255, 0] },
+    { name: "B", color: [0, 0, 255] },
+    { name: "Y", color: [255, 255, 0] },
+    { name: "P", color: [255, 0, 255] },
+];
+const colorListWEB = [
+    { name: "R", color: "#ff4d4d" }, // Red
+    { name: "G", color: "#4dff4d" }, // Green
+    { name: "B", color: "#4d4dff" }, // Blue
+    { name: "Y", color: "#ffff4d" }, // Yellow
+    { name: "P", color: "#ff4dff" }, // Pink/Magenta
+];
 
-let extensionBaseUrl = "";
-(function findExtensionBase() {
-    const scripts = document.getElementsByTagName("script");
-    for (const s of scripts) {
-        if (!s.src) continue;
-        if (s.src.includes("RGBYPMaskEditor.js")) {
-            const url = new URL(s.src, window.location.origin);
-            extensionBaseUrl = url.href.replace(/RGBYPMaskEditor\.js.*$/i, "");
-            break;
+export function updateSelectedColorUI(selectedIndex) {
+    const state = getNodeState(GP.baseNode.id);
+
+    state.colorButtons.forEach((btn, idx) => {
+        if (idx === selectedIndex) {
+            btn.style.border = "2px solid #ffffff";
+            btn.style.opacity = "1";
+        } else {
+            btn.style.border = "none";
+            btn.style.opacity = "0.6";
         }
-    }
-})();
+    });
 
-function makeIconButton(iconName, altText) {
-    const btn = document.createElement("button");
-    btn.style.padding = "0px";
-    btn.style.cursor = "pointer";
-    btn.style.borderRadius = "4px";
-    btn.style.border = "1px solid #555";
-    btn.style.background = "#333";
-    btn.style.color = "#fff";
-    btn.style.fontSize = "12px";
-    btn.style.display = "flex";
-    btn.style.alignItems = "center";
-    btn.style.justifyContent = "center";
-    btn.style.width = "60px";
-    btn.style.height = "60px";
-    btn.title = altText;
-
-    const img = document.createElement("img");
-    img.src = extensionBaseUrl + iconName;
-    img.alt = altText;
-    img.style.maxWidth = "100%";
-    img.style.maxHeight = "100%";
-    img.style.objectFit = "contain";
-
-    btn.appendChild(img);
-    return btn;
+    state.drawCursor.style.outlineColor = colorListWEB[selectedIndex].color;
 }
 
-export function openMaskEditor(node, imageWidget, imageInfo) {
-    const originalFilename = imageWidget?.value || imageInfo?.filename || "rgbyp.png";
+export function updateToolButtonsHighlight(activeTool) {
+    const state = getNodeState(GP.baseNode.id);
+    if (!state) return;
 
-    function getGraphImageKey() {
-        const v = imageWidget?.value || imageInfo?.filename || "";
-        return v == null ? "" : String(v);
-    }
+    const map = {
+        Brush: state.brushBtn,
+        Erase: state.eraseBtn,
+        Scroll: state.scrollBtn,
+    };
 
-    function stripExt(name) {
-        const s = (name == null) ? "" : String(name);
-        const m = s.match(/^(.*)\.(png|jpg|jpeg|webp|bmp|gif)$/i);
-        return m ? m[1] : s;
-        /*
-                        const m = name.match(/^(.*)\.(png|jpg|jpeg|webp|bmp|gif)$/i);
-                        return m ? m[1] : name;
-        */
-    }
-
-    let baseFilename;
-    let compositeFilename;
-    let maskFilename;
-    let baseNameNoExt;
-
-    const mRgb = originalFilename.match(/^(.*)__rgbyp\.png$/i);
-    if (mRgb) {
-        baseFilename = mRgb[1];
-        baseNameNoExt = stripExt(baseFilename);
-        compositeFilename = originalFilename;
-    } else {
-        baseFilename = originalFilename;
-        baseNameNoExt = stripExt(baseFilename);
-        compositeFilename = baseFilename + "__rgbyp.png";
-    }
-    maskFilename = baseNameNoExt + "__rgbyp_mask.png";
-
-    const imgType = imageWidget?.image_type || imageInfo?.type || "input";
-    const imgSubfolder = imageWidget?.dir || imageInfo?.subfolder || "";
-
-    // Картинка из самой ноды (любая нода, своя или чужая)
-    function getNodeInputImage() {
-        const filename = imageWidget?.value || imageInfo?.filename || "";
-        const type = imageWidget?.image_type || "input";   // ← так
-        const subfolder = imageWidget?.dir || "";
-
-        const params = new URLSearchParams({ filename, type, subfolder });
-        params.append("_t", Date.now()); // анти-кэш
-
-        return `/view?${params.toString()}`;
-    }
-
-    // Ключ для запоминания, какая картинка была при сохранении маски
-    function getNodeImageKey() {
-        const filename = imageWidget?.value || imageInfo?.filename || "";
-        const type = imageWidget?.image_type || imageInfo?.type || "";
-        const subfolder = imageWidget?.dir || imageInfo?.subfolder || "";
-        return `${type}|${subfolder}|${filename}`;
-    }
-
-    const currentImageKey = getNodeImageKey();
-    const lastImageKey = node.properties?.rgbyp_last_image_key || null;
-
-    const uniqueId = node.properties?.["unique_id"] || node.id || Date.now().toString();
-    const tempMaskFilename = `RGBYP_${uniqueId}_mask.png`;
-    const metaFilename = `RGBYP_${uniqueId}_meta.json`;
-
-    const maskSrc = `/view?filename=${encodeURIComponent(
-        tempMaskFilename
-    )}&type=temp&_rgbyp=${Date.now()}`;
-    let dynamicMaskSrc = maskSrc;
-
+    Object.entries(map).forEach(([key, btn]) => {
+        if (!btn) return;
+        if (key === activeTool) {
+            btn.style.backgroundColor = "#666";
+        } else {
+            btn.style.backgroundColor = "#333";
+        }
+    });
+}
+/**
+ * UI for RGBYP Mask Editor (layout only, no image I/O).
+ * - Keeps big dialog with left tools, central canvas, right controls.
+ * - Does NOT load or save any images and does not draw.
+ */
+export function openMaskEditor(node) {
+    // overlay
     const overlay = document.createElement("div");
     overlay.style.position = "fixed";
     overlay.style.left = "0";
     overlay.style.top = "0";
     overlay.style.width = "100vw";
     overlay.style.height = "100vh";
-    overlay.style.background = "rgba(0,0,0,0.7)";
+    overlay.style.background = "rgba(0, 0, 0, 0.75)";
     overlay.style.zIndex = "9999";
     overlay.style.display = "flex";
     overlay.style.alignItems = "center";
     overlay.style.justifyContent = "center";
-    overlay.style.fontFamily = "sans-serif";
+    overlay.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    setNodeState(GP.baseNode.id, { overlayDialog: overlay });
 
-    const windowDiv = document.createElement("div");
-    windowDiv.style.position = "relative";
-    windowDiv.style.display = "flex";
-    windowDiv.style.background = "#222";
-    windowDiv.style.borderRadius = "8px";
-    windowDiv.style.boxShadow = "0 0 20px rgba(0,0,0,0.8)";
-    windowDiv.style.padding = "10px";
-    windowDiv.style.gap = "10px";
-    windowDiv.style.width = "90vw";
-    windowDiv.style.height = "90vh";
-    windowDiv.style.maxWidth = "90vw";
-    windowDiv.style.maxHeight = "90vh";
-    windowDiv.style.boxSizing = "border-box";
-    windowDiv.style.overflow = "hidden";
+    // dialog
+    const dialog = document.createElement("div");
+    dialog.style.position = "relative";
+    dialog.style.display = "flex";
+    dialog.style.flexDirection = "column";
+    dialog.style.boxSizing = "border-box";
+    dialog.style.background = "#222";
+    dialog.style.borderRadius = "8px";
+    dialog.style.boxShadow = "0 0 25px rgba(0,0,0,0.8)";
+    dialog.style.padding = "10px 12px 12px 12px";
 
-    let keyHandler = null;
-    let keyUpHandler = null;
-    const resizeHandler = () => resizeCursorCanvasToMask();
+    const margin = 40;
+    const vw = window.innerWidth || 1280;
+    const vh = window.innerHeight || 720;
+    dialog.style.width = "calc(100vw - " + (margin * 2) + "px)";
+    dialog.style.height = "calc(100vh - " + (margin * 2) + "px)";
+    // header
+    const header = document.createElement("div");
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.justifyContent = "space-between";
+    header.style.marginBottom = "6px";
 
-    const closeEditor = () => {
-        if (keyHandler) window.removeEventListener("keydown", keyHandler);
-        if (keyUpHandler) window.removeEventListener("keyup", keyUpHandler);
-        window.removeEventListener("resize", resizeHandler);
-        if (overlay.parentNode) {
-            document.body.removeChild(overlay);
-        }
-    };
+    const title = document.createElement("div");
+    title.textContent = "RGBYP Mask Editor";
+    title.style.color = "#f0f0f0";
+    title.style.fontSize = "15px";
+    title.style.lineHeight = "24px";
+    title.style.fontWeight = "600";
 
-    const closeBtn = document.createElement("div");
-    closeBtn.textContent = "✕";
-    closeBtn.style.position = "absolute";
-    closeBtn.style.top = "4px";
-    closeBtn.style.right = "8px";
-    closeBtn.style.cursor = "pointer";
-    closeBtn.style.color = "#fff";
-    closeBtn.style.fontSize = "18px";
-    closeBtn.style.zIndex = "2";
-    closeBtn.addEventListener("click", () => {
-        closeEditor();
-    });
+    const headerRight = document.createElement("div");
+    headerRight.style.display = "flex";
+    headerRight.style.alignItems = "center";
+    headerRight.style.gap = "8px";
 
+    const helpIcon = document.createElement("div");
+    helpIcon.textContent = "?";
+    helpIcon.style.width = "48px";
+    helpIcon.style.textAlign = "center";
+    helpIcon.style.cursor = "pointer";
+    helpIcon.style.fontSize = "24px";
+    helpIcon.style.fontWeight = "bold";
+    helpIcon.style.color = "#fff";
+    helpIcon.style.borderRight = "1px solid #444";
+    helpIcon.dataset.tool = "Help";
+    setNodeState(GP.baseNode.id, { helpIcon: helpIcon });
+
+
+    const closeIcon = document.createElement("div");
+    closeIcon.textContent = "✕";
+    closeIcon.style.width = "48px";
+    closeIcon.style.textAlign = "center";
+    closeIcon.style.cursor = "pointer";
+    closeIcon.style.fontSize = "24px";
+    closeIcon.style.fontWeight = "bold";
+    closeIcon.style.color = "#fff";
+    closeIcon.dataset.tool = "Close";
+
+
+    headerRight.appendChild(helpIcon);
+    headerRight.appendChild(closeIcon);
+
+    header.appendChild(title);
+    header.appendChild(headerRight);
+
+    // body layout
+    const body = document.createElement("div");
+    body.style.flex = "1 1 auto";
+    body.style.display = "flex";
+    body.style.gap = "10px";
+    body.style.minHeight = "0"; // allow flex children to shrink
+
+    // left tools column
     const toolsPanel = document.createElement("div");
     toolsPanel.style.display = "flex";
     toolsPanel.style.flexDirection = "column";
-    toolsPanel.style.gap = "8px";
-    toolsPanel.style.padding = "5px 5px";
-    toolsPanel.style.background = "#333";
-    toolsPanel.style.borderRadius = "6px";
-    toolsPanel.style.alignItems = "center";
-    toolsPanel.style.minWidth = "70px";
-    toolsPanel.style.width = "70px";
-    toolsPanel.style.maxWidth = "70px";
-    toolsPanel.style.flex = "0 0 70px";
+    toolsPanel.style.alignItems = "stretch";
+    toolsPanel.style.gap = "6px";
+    toolsPanel.style.padding = "4px 4px 4px 0";
+    toolsPanel.style.width = "72px";
+    toolsPanel.style.flex = "0 0 72px";
 
-    const toolsTitle = document.createElement("div");
-    toolsTitle.textContent = "Tools";
-    toolsTitle.style.color = "#ddd";
-    toolsTitle.style.fontSize = "12px";
-    toolsTitle.style.textAlign = "center";
-    toolsTitle.style.marginBottom = "4px";
+    function makeIconButton(iconName, label, iconSize) {
+        const btn = document.createElement("button");
+        btn.style.padding = "4px 4px";
+        btn.style.borderRadius = "4px";
+        btn.style.border = "1px solid #555";
+        btn.style.background = "#333";
+        btn.style.color = "#eee";
+        btn.style.cursor = "pointer";
+        btn.style.boxSizing = "border-box";
+        btn.dataset.tool = label;
 
-    const toolsSpacer = document.createElement("div");
-    toolsSpacer.style.height = "100%";
+        const img = document.createElement("img");
+        img.src = extensionBaseUrl + iconName;
+        img.alt = label;
+        img.style.width = iconSize;
+        img.style.height = iconSize;
+        img.style.objectFit = "contain";
 
-    const brushBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_brush.png", "Brush");
-    const eraserBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_erase.png", "Eraser");
-    const scrollBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_scroll.png", "Scroll");
-    const clearBtn = makeIconButton("/extensions/ComfyUI-RGBYP-Mask-Editor/i_clear.png", "Clear");
+        btn.appendChild(img);
 
-    let currentTool = "brush";
-    let currentColor = Array.isArray(lastBrushColor) ? [...lastBrushColor] : [255, 0, 0];
-
-    function updateToolButtons() {
-        brushBtn.style.background = currentTool === "brush" ? "#777" : "#333";
-        eraserBtn.style.background = currentTool === "eraser" ? "#777" : "#333";
-        scrollBtn.style.background = currentTool === "scroll" ? "#777" : "#333";
-
-        if ((currentTool === "scroll" || panMode) && !isPanningDrag && isPointerOverCanvas) {
-            maskCanvas.style.cursor = "grab";
-        } else if (!isPanningDrag) {
-            maskCanvas.style.cursor = "none";
-        }
+        return btn;
     }
 
-    brushBtn.addEventListener("click", () => {
-        currentTool = "brush";
-        panMode = false;
-        updateToolButtons();
-    });
 
-    eraserBtn.addEventListener("click", () => {
-        currentTool = "eraser";
-        panMode = false;
-        updateToolButtons();
-    });
+    const brushBtn = makeIconButton("i_brush.png", "Brush", "64px");
+    const eraserBtn = makeIconButton("i_erase.png", "Eraser", "64px");
+    const scrollBtn = makeIconButton("i_scroll.png", "Scroll", "64px");
+    const clearBtn = makeIconButton("i_clear.png", "Clear", "64px");
 
-    scrollBtn.addEventListener("click", () => {
-        currentTool = "scroll";
-        panMode = true;
-        updateToolButtons();
-    });
-
-    toolsPanel.appendChild(toolsTitle);
     toolsPanel.appendChild(brushBtn);
     toolsPanel.appendChild(eraserBtn);
     toolsPanel.appendChild(scrollBtn);
-    toolsPanel.appendChild(toolsSpacer);
+    toolsPanel.appendChild(Object.assign(document.createElement("div"), { style: "height:100%;" }));
     toolsPanel.appendChild(clearBtn);
 
+    // center canvas area
+    const centralPanel = document.createElement("div");
+    centralPanel.style.display = "flex";
+
+    centralPanel.style.alignItems = "center";
+    centralPanel.style.textAlign = "center";
+    // centralPanel.style.justifyContent = "center";
+    centralPanel.style.background = "#111";
+    centralPanel.style.borderRadius = "6px";
+    centralPanel.style.overflow = "scroll"; // scrollbars always visible, no UI jump
+    centralPanel.style.position = "relative";
+    centralPanel.style.height = "100%";
+    centralPanel.style.width = "100%";
+    centralPanel.style.backgroundColor = "#9f9f9fff";
+    setNodeState(GP.baseNode.id, { centralPanel: centralPanel });
+
     const canvasContainer = document.createElement("div");
-    canvasContainer.style.flex = "1 1 auto";
     canvasContainer.style.display = "block";
-    canvasContainer.style.alignItems = "center";
-    canvasContainer.style.textAlign = "center";
-    canvasContainer.style.justifyContent = "center";
-    canvasContainer.style.background = "#111";
-    canvasContainer.style.borderRadius = "6px";
-    canvasContainer.style.overflow = "scroll"; // scrollbars always visible, no UI jump
     canvasContainer.style.position = "relative";
-    canvasContainer.style.height = "100%";
-    canvasContainer.style.maxWidth = "100%";
-    canvasContainer.style.maxHeight = "100%";
- 
+    canvasContainer.style.flex = "0 0 auto";
+    canvasContainer.style.maxWidth = "none";
+    canvasContainer.style.maxHeight = "none";
+    canvasContainer.style.margin = "auto";
+    setNodeState(GP.baseNode.id, { canvasContainer: canvasContainer });
+
+
+    const originalCanvas = document.createElement("canvas");
+    originalCanvas.style.cursor = "none";
+    originalCanvas.style.display = "block";
+    // originalCanvas.style.position = "relative";
+    originalCanvas.style.position = "absolute";
+    originalCanvas.style.width = "100%";
+    originalCanvas.style.height = "100%";
+    originalCanvas.style.top = "0";
+    originalCanvas.style.left = "0";
+    setNodeState(GP.baseNode.id, { originalCanvas: originalCanvas });
+
     const maskCanvas = document.createElement("canvas");
-    const maskCtx = maskCanvas.getContext("2d");
-    maskCanvas.style.cursor = "none";
     maskCanvas.style.display = "block";
     maskCanvas.style.position = "absolute";
-    maskCanvas.style.left = "50%";
-    maskCanvas.style.top = "50%";
-    maskCanvas.style.transform = "translate(-50%, -50%)";
+    maskCanvas.style.width = "100%";
+    maskCanvas.style.height = "100%";
+    maskCanvas.style.top = "0";
+    maskCanvas.style.left = "0";
+    maskCanvas.style.pointerEvents = "auto";
+    setNodeState(GP.baseNode.id, { maskCanvas: maskCanvas });
 
-    const cursorCanvas = document.createElement("canvas");
-    const cursorCtx = cursorCanvas.getContext("2d");
-    cursorCanvas.style.display = "block";
-    cursorCanvas.style.position = "absolute";
-    cursorCanvas.style.left = "50%";
-    cursorCanvas.style.top = "50%";
-    cursorCanvas.style.transform = "translate(-50%, -50%)";
-    // cursorCanvas.style.verticalAlign = "middle";
-    cursorCanvas.style.pointerEvents = "none";
-
+    canvasContainer.appendChild(originalCanvas);
     canvasContainer.appendChild(maskCanvas);
-    canvasContainer.appendChild(cursorCanvas);
 
-    let currentZoom = 1;
-    // позволяем уменьшать до 10% исходного размера
-    const MIN_ZOOM = 0.1;
-    const MAX_ZOOM = 3;
+    const drawCursor = document.createElement("div");
+    drawCursor.style.position = "absolute";
+    drawCursor.style.pointerEvents = "none";
+    drawCursor.style.border = "1px solid #ffffff";
+    drawCursor.style.outline = "2px solid #ff0000ff";
 
-    let isPointerOverCanvas = false;
-    let panMode = false;
-    let spacePanActive = false;
-    let isPanningDrag = false;
-    let panStartX = 0;
-    let panStartY = 0;
-    let panScrollLeft = 0;
-    let panScrollTop = 0;
+    drawCursor.style.borderRadius = "50%";
+    drawCursor.style.boxSizing = "border-box";
+    drawCursor.style.transform = "translate(-50%, -50%)";
+    drawCursor.style.zIndex = "10";
+    drawCursor.style.display = "none";
+    setNodeState(GP.baseNode.id, { drawCursor: drawCursor });
 
-    updateToolButtons();
+    canvasContainer.appendChild(drawCursor);
 
-    canvasContainer.addEventListener("mouseenter", () => {
-        isPointerOverCanvas = true;
-        if (panMode && !isPanningDrag) {
-            maskCanvas.style.cursor = "grab";
-        }
-    });
-
-    canvasContainer.addEventListener("mouseleave", () => {
-        isPointerOverCanvas = false;
-        if (!isPanningDrag && currentTool !== "scroll") {
-            panMode = false;
-            maskCanvas.style.cursor = "none";
-        }
-    });
-
-    canvasContainer.addEventListener(
-        "wheel",
-        (e) => {
-            e.preventDefault();
-            const rect = canvasContainer.getBoundingClientRect();
-            let clientX = e.clientX;
-            let clientY = e.clientY;
-
-            const targetIsCanvas = e.target === maskCanvas || e.target === cursorCanvas;
-            if (!targetIsCanvas) {
-                clientX = rect.left + rect.width / 2;
-                clientY = rect.top + rect.height / 2;
-                // console.log("Wheel event not on canvas, using center point");
-            }
-
-            handleZoom(e.deltaY, clientX, clientY);
-        },
-        { passive: false }
-    );
-
+    centralPanel.appendChild(canvasContainer);
+    // right side panel
     const rightPanel = document.createElement("div");
     rightPanel.style.display = "flex";
     rightPanel.style.flexDirection = "column";
     rightPanel.style.gap = "8px";
-    rightPanel.style.padding = "5px 8px";
-    rightPanel.style.background = "#333";
-    rightPanel.style.borderRadius = "6px";
-    rightPanel.style.width = "185px";
-    // rightPanel.style.minWidth = "220px";
-    // rightPanel.style.maxWidth = "220px";
-    // rightPanel.style.flex = "0 0 220px";
+    rightPanel.style.padding = "4px 0 4px 4px";
+    rightPanel.style.width = "190px";
+    rightPanel.style.flex = "0 0 190px";
+    rightPanel.style.borderLeft = "1px solid #333";
 
-    const rightTitle = document.createElement("div");
-    rightTitle.textContent = "RGBYP Mask";
-    rightTitle.style.color = "#ddd";
-    rightTitle.style.fontSize = "12px";
-    rightTitle.style.textAlign = "center";
-    rightTitle.style.marginBottom = "4px";
+    function makeSliderRow(labelText, min, max, value, suffix) {
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.flexDirection = "column";
+        row.style.gap = "4px";
 
+        const label = document.createElement("div");
+        label.textContent = labelText;
+        label.style.fontSize = "16px";
+        label.style.color = "#ccc";
+
+        const inner = document.createElement("div");
+        inner.style.display = "flex";
+        inner.style.alignItems = "center";
+        inner.style.gap = "6px";
+
+        const input = document.createElement("input");
+        input.type = "range";
+        input.min = String(min);
+        input.max = String(max);
+        input.value = String(value);
+        input.style.flex = "1 1 auto";
+
+        const span = document.createElement("div");
+        span.textContent = value + (suffix || "");
+        span.style.fontSize = "11px";
+        span.style.color = "#ddd";
+        span.style.minWidth = "40px";
+
+        input.addEventListener("input", () => {
+            span.textContent = input.value + (suffix || "");
+            // stub, no logic
+        });
+
+        inner.appendChild(input);
+        inner.appendChild(span);
+        row.appendChild(label);
+        row.appendChild(inner);
+        return row;
+    }
+
+    rightPanel.appendChild(makeSliderRow("Brush size", 1, 200, 50, " px"));
+    rightPanel.appendChild(makeSliderRow("Opacity", 0, 100, 75, " %"));
+
+
+    // color buttons
     const colorsLabel = document.createElement("div");
     colorsLabel.textContent = "Colors";
+    colorsLabel.style.fontSize = "16px";
     colorsLabel.style.color = "#ccc";
-    colorsLabel.style.fontSize = "12px";
 
     const colorsRow = document.createElement("div");
     colorsRow.style.display = "flex";
+    colorsRow.style.flexDirection = "row";
     colorsRow.style.flexWrap = "wrap";
     colorsRow.style.gap = "4px";
+    colorsRow.style.justifyContent = "space-between";
 
-    const colorList = [
-        { name: "R", color: [255, 0, 0] },
-        { name: "G", color: [0, 255, 0] },
-        { name: "B", color: [0, 0, 255] },
-        { name: "Y", color: [255, 255, 0] },
-        { name: "P", color: [255, 0, 255] },
-    ];
+    function makeColorButton(cssColor) {
+        const btn = document.createElement("button");
+        btn.style.width = "32px";
+        btn.style.height = "32px";
+        btn.style.borderRadius = "4px";
+        btn.style.border = "1px solid #444";
+        btn.style.background = cssColor;
+        btn.style.color = "#000";
+        btn.style.fontWeight = "600";
+        btn.style.cursor = "pointer";
+        btn.style.fontSize = "11px";
+        btn.style.opacity = "0.6";
+        btn.dataset.tool = "ColorButton" + cssColor;
 
-    function rgbToCss(c) {
-        return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+        return btn;
     }
 
-    function colorsEqual(a, b) {
-        return (
-            Array.isArray(a) &&
-            Array.isArray(b) &&
-            a[0] === b[0] &&
-            a[1] === b[1] &&
-            a[2] === b[2]
-        );
-    }
-
-    const colorSwatches = [];
-
-    colorList.forEach((c) => {
-        const sw = document.createElement("div");
-        sw.style.width = "30px";
-        sw.style.height = "30px";
-        sw.style.borderRadius = "4px";
-        sw.style.background = rgbToCss(c.color);
-        sw.style.cursor = "pointer";
-        sw.style.border = colorsEqual(c.color, currentColor)
-            ? "2px solid #000"
-            : "2px solid transparent";
-        sw.title = c.name;
-
-        sw.addEventListener("click", () => {
-            currentColor = c.color;
-            lastBrushColor = c.color;
-            colorSwatches.forEach((s) => (s.style.border = "2px solid transparent"));
-            sw.style.border = "2px solid #000";
-        });
-
-        colorSwatches.push(sw);
-        colorsRow.appendChild(sw);
+    colorListWEB.forEach((c) => {
+        colorsRow.appendChild(makeColorButton(c.color));
     });
 
-    const sizeLabel = document.createElement("div");
-    sizeLabel.textContent = "Brush size";
-    sizeLabel.style.color = "#ccc";
-    sizeLabel.style.fontSize = "12px";
+    setNodeState(GP.baseNode.id, { colorButtons: [...colorsRow.children] });
+    updateSelectedColorUI(getNodeState(GP.baseNode.id).drawColor);
 
-    const sizeRow = document.createElement("div");
-    sizeRow.style.display = "flex";
-    sizeRow.style.alignItems = "center";
-    sizeRow.style.gap = "6px";
+    const autoMaskButtonsRow = document.createElement("div");
+    autoMaskButtonsRow.style.display = "flex";
+    autoMaskButtonsRow.style.flexDirection = "row";
+    autoMaskButtonsRow.style.gap = "4px";
+    autoMaskButtonsRow.style.marginTop = "4px";
+    autoMaskButtonsRow.style.justifyContent = "space-between";
 
-    const sizeInput = document.createElement("input");
-    sizeInput.type = "range";
-    sizeInput.min = "1";
-    sizeInput.max = "300";
-    sizeInput.value = String(lastBrushSize || 50);
+    const autoHalfBtn = makeIconButton("i_d_11.png", "Half", "32px");
+    const auto1to2Btn = makeIconButton("i_d_12.png", "1 to 2", "32px");
+    const auto2to1Btn = makeIconButton("i_d_21.png", "2 to 1", "32px");
+    const autoThirdsBtn = makeIconButton("i_d_111.png", "Thirds", "32px");
 
-    const sizeValue = document.createElement("div");
-    sizeValue.textContent = sizeInput.value;
-    sizeValue.style.color = "#ddd";
-    sizeValue.style.fontSize = "12px";
-    sizeValue.style.minWidth = "24px";
+    autoMaskButtonsRow.appendChild(autoHalfBtn);
+    autoMaskButtonsRow.appendChild(auto1to2Btn);
+    autoMaskButtonsRow.appendChild(auto2to1Btn);
+    autoMaskButtonsRow.appendChild(autoThirdsBtn);
 
-    sizeInput.addEventListener("input", () => {
-        sizeValue.textContent = sizeInput.value;
-        lastBrushSize = parseFloat(sizeInput.value) || 50;
-    });
-
-    const opacityLabel = document.createElement("div");
-    opacityLabel.textContent = "Opacity";
-    opacityLabel.style.color = "#ccc";
-    opacityLabel.style.fontSize = "12px";
-
-    const opacityRow = document.createElement("div");
-    opacityRow.style.display = "flex";
-    opacityRow.style.alignItems = "center";
-    opacityRow.style.gap = "6px";
-
-    const opacityInput = document.createElement("input");
-    opacityInput.type = "range";
-    opacityInput.min = "1";
-    opacityInput.max = "100";
-    opacityInput.value = String(lastMaskOpacity || 100);
-
-    const opacityValue = document.createElement("div");
-    opacityValue.textContent = opacityInput.value;
-    opacityValue.style.color = "#ddd";
-    opacityValue.style.fontSize = "12px";
-    opacityValue.style.minWidth = "24px";
-
-    opacityInput.addEventListener("input", () => {
-        opacityValue.textContent = opacityInput.value;
-        lastMaskOpacity = parseFloat(opacityInput.value) || 100;
-        redraw();
-    });
-
-    sizeRow.appendChild(sizeInput);
-    sizeRow.appendChild(sizeValue);
-
-    opacityRow.appendChild(opacityInput);
-    opacityRow.appendChild(opacityValue);
-
-    const autoButtonsRow = document.createElement("div");
-    autoButtonsRow.style.display = "flex";
-    autoButtonsRow.style.flexDirection = "row";
-    autoButtonsRow.style.gap = "4px";
-    autoButtonsRow.style.marginTop = "4px";
-    autoButtonsRow.style.justifyContent = "space-between";
-
-    const autoHalfBtn = makeIconButton(
-        "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_11.png",
-        "autoMaskSplitHalf"
-    );
-    const auto1to2Btn = makeIconButton(
-        "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_12.png",
-        "autoMaskSplit1to2"
-    );
-    const auto2to1Btn = makeIconButton(
-        "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_21.png",
-        "autoMaskSplit2to1"
-    );
-    const autoThirdsBtn = makeIconButton(
-        "/extensions/ComfyUI-RGBYP-Mask-Editor/i_d_111.png",
-        "autoMaskSplitThirds"
-    );
-
-    autoHalfBtn.style.width = "32px";
-    autoHalfBtn.style.height = "32px";
-    auto1to2Btn.style.width = "32px";
-    auto1to2Btn.style.height = "32px";
-    auto2to1Btn.style.width = "32px";
-    auto2to1Btn.style.height = "32px";
-    autoThirdsBtn.style.width = "32px";
-    autoThirdsBtn.style.height = "32px";
-
-    autoButtonsRow.appendChild(autoHalfBtn);
-    autoButtonsRow.appendChild(auto1to2Btn);
-    autoButtonsRow.appendChild(auto2to1Btn);
-    autoButtonsRow.appendChild(autoThirdsBtn);
-
-    const rightPanelSpacer = document.createElement("div");
-    rightPanelSpacer.style.height = "100%";
-
-    const saveBtn = document.createElement("button");
-    saveBtn.textContent = "SAVE";
-    saveBtn.style.marginTop = "8px";
-    saveBtn.style.padding = "6px";
-    saveBtn.style.cursor = "pointer";
-    saveBtn.style.borderRadius = "4px";
-    saveBtn.style.border = "1px solid #88ff88";
-    saveBtn.style.background = "#2a4";
-    saveBtn.style.color = "#fff";
-    saveBtn.style.fontWeight = "bold";
-    saveBtn.style.fontSize = "13px";
-
-    const rightPanelSpacerSmall1 = document.createElement("div");
-    rightPanelSpacerSmall1.style.height = "20px";
-    const rightPanelSpacerSmall2 = document.createElement("div");
-    rightPanelSpacerSmall2.style.height = "20px";
-
-    rightPanel.appendChild(rightTitle);
+    rightPanel.appendChild(Object.assign(document.createElement("div"), { style: "height:16px;" }));
     rightPanel.appendChild(colorsLabel);
     rightPanel.appendChild(colorsRow);
-    rightPanel.appendChild(rightPanelSpacerSmall1);
-    rightPanel.appendChild(sizeLabel);
-    rightPanel.appendChild(sizeRow);
-    rightPanel.appendChild(opacityLabel);
-    rightPanel.appendChild(opacityRow);
-    rightPanel.appendChild(rightPanelSpacerSmall2);
-    rightPanel.appendChild(autoButtonsRow);
-    rightPanel.appendChild(rightPanelSpacer);
+    rightPanel.appendChild(Object.assign(document.createElement("div"), { style: "height:16px;" }));
+    rightPanel.appendChild(autoMaskButtonsRow);
+
+    function makeTextButton(label, primary) {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        btn.style.padding = "5px 14px";
+        btn.style.borderRadius = "4px";
+        btn.style.border = "1px solid " + (primary ? "#5a9" : "#555");
+        btn.style.background = primary ? "#3b7" : "#333";
+        btn.style.color = "#fff";
+        btn.style.cursor = "pointer";
+        btn.style.fontSize = "16px";
+        btn.style.fontWeight = "bold";
+        btn.dataset.tool = label;
+        return btn;
+    }
+
+    const saveBtn = makeTextButton("Save", true);
+
+    rightPanel.appendChild(Object.assign(document.createElement("div"), { style: "height:100%;" }));
     rightPanel.appendChild(saveBtn);
 
-    windowDiv.appendChild(closeBtn);
-    windowDiv.appendChild(toolsPanel);
-    windowDiv.appendChild(canvasContainer);
-    windowDiv.appendChild(rightPanel);
+    const helpPanel = document.createElement("div");
+    helpPanel.style.position = "absolute";
+    helpPanel.style.left = "0";
+    helpPanel.style.right = "0";
+    helpPanel.style.bottom = "0";
+    helpPanel.style.zIndex = "10";
+    const headerHeight = header.getBoundingClientRect().height;
+    helpPanel.style.top = headerHeight + "px";    
 
-    overlay.appendChild(windowDiv);
+    // перекрываем только область под хедером
+    helpPanel.style.display = "none";            // по умолчанию скрыта
+    helpPanel.style.backgroundColor = "#333";
+    helpPanel.style.boxSizing = "border-box";
+    helpPanel.style.padding = "20px 40px";
+    helpPanel.style.overflow = "auto";
+    helpPanel.style.color = "#fff";
+    helpPanel.style.flexDirection = "column";
+
+    helpPanel.innerHTML = HELP;
+    setNodeState(GP.baseNode.id, { helpPanel: helpPanel });
+
+
+    // нижняя панель с кнопкой Close
+    const helpFooter = document.createElement("div");
+    helpFooter.style.display = "flex";
+    helpFooter.style.justifyContent = "flex-end";
+    helpFooter.style.marginTop = "16px";
+
+    const helpCloseBtn = makeTextButton("Close", true); // такой же зелёный, как Save
+    setNodeState(GP.baseNode.id, { helpCloseBtn: helpCloseBtn });
+
+    helpFooter.appendChild(helpCloseBtn);
+    helpPanel.appendChild(helpFooter);
+
+
+
+    // assemble
+    body.appendChild(toolsPanel);
+    body.appendChild(centralPanel);
+    body.appendChild(rightPanel);
+    // body.appendChild(helpPanel);
+
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    dialog.appendChild(helpPanel);
+
+    overlay.appendChild(dialog);
     document.body.appendChild(overlay);
 
-    const baseImg = new Image();
-    baseImg.crossOrigin = "anonymous";
+    setNodeState(GP.baseNode.id, { baseImg: new Image() });
+    setNodeState(GP.baseNode.id, { maskImg: new Image() });
 
-    const maskImg = new Image();
-    maskImg.crossOrigin = "anonymous";
+    initBaseImageAndCanvas();
 
-    let maskBuffer = document.createElement("canvas");
-    let maskBufferCtx = maskBuffer.getContext("2d");
+    // hotkeys
+    registerKeyHandlers(dialog);
 
-    function clearMaskBuffer(redrawAfter = true) {
-        if (maskBufferCtx && maskBuffer) {
-            maskBufferCtx.clearRect(0, 0, maskBuffer.width, maskBuffer.height);
-            if (redrawAfter) redraw();
+    function closeEditor() {
+        unregisterKeyHandlers(dialog);
+        if (overlay.parentNode) {
+            overlay.parentNode.removeChild(overlay);
         }
     }
 
-    function autoMaskSplitHalf() {
-        if (!maskBuffer || !maskBufferCtx) return;
-        const w = maskBuffer.width;
-        const h = maskBuffer.height;
-        if (!w || !h) return;
 
-        clearMaskBuffer(false);
-
-        const half = w / 2;
-        maskBufferCtx.fillStyle = rgbToCss([255, 0, 0]);
-        maskBufferCtx.fillRect(0, 0, half, h);
-        maskBufferCtx.fillStyle = rgbToCss([0, 255, 0]);
-        maskBufferCtx.fillRect(half, 0, w - half, h);
-
-        redraw();
-    }
-
-    function autoMaskSplit1to2() {
-        if (!maskBuffer || !maskBufferCtx) return;
-        const w = maskBuffer.width;
-        const h = maskBuffer.height;
-        if (!w || !h) return;
-
-        clearMaskBuffer(false);
-
-        const third = w / 3;
-
-        maskBufferCtx.fillStyle = rgbToCss([255, 0, 0]);
-        maskBufferCtx.fillRect(0, 0, third, h);
-        maskBufferCtx.fillStyle = rgbToCss([0, 255, 0]);
-        maskBufferCtx.fillRect(third, 0, w - third, h);
-
-        redraw();
-    }
-
-    function autoMaskSplit2to1() {
-        if (!maskBuffer || !maskBufferCtx) return;
-        const w = maskBuffer.width;
-        const h = maskBuffer.height;
-        if (!w || !h) return;
-
-        clearMaskBuffer(false);
-
-        const third = w / 3;
-        const twoThirds = 2 * third;
-
-        maskBufferCtx.fillStyle = rgbToCss([255, 0, 0]);
-        maskBufferCtx.fillRect(0, 0, twoThirds, h);
-        maskBufferCtx.fillStyle = rgbToCss([0, 255, 0]);
-        maskBufferCtx.fillRect(twoThirds, 0, w - twoThirds, h);
-
-        redraw();
-    }
-
-    function autoMaskSplitThirds() {
-        if (!maskBuffer || !maskBufferCtx) return;
-        const w = maskBuffer.width;
-        const h = maskBuffer.height;
-        if (!w || !h) return;
-
-        clearMaskBuffer(false);
-
-        const third = w / 3;
-        const twoThirds = 2 * third;
-
-        maskBufferCtx.fillStyle = rgbToCss([255, 0, 0]);
-        maskBufferCtx.fillRect(0, 0, third, h);
-        maskBufferCtx.fillStyle = rgbToCss([0, 255, 0]);
-        maskBufferCtx.fillRect(third, 0, third, h);
-        maskBufferCtx.fillStyle = rgbToCss([0, 0, 255]);
-        maskBufferCtx.fillRect(twoThirds, 0, w - twoThirds, h);
-
-        redraw();
-    }
-
-    autoHalfBtn.addEventListener("click", () => {
-        autoMaskSplitHalf();
-    });
-    auto1to2Btn.addEventListener("click", () => {
-        autoMaskSplit1to2();
-    });
-    auto2to1Btn.addEventListener("click", () => {
-        autoMaskSplit2to1();
-    });
-    autoThirdsBtn.addEventListener("click", () => {
-        autoMaskSplitThirds();
-    });
-
-    function resizeCursorCanvasToMask() {
-        if (!maskCanvas || !cursorCanvas) return;
-
-        // Берём реальный размер маски на экране
-        const rect = maskCanvas.getBoundingClientRect();
-
-        // Внутреннее разрешение курсор-канваса = видимому размеру
-        cursorCanvas.width = rect.width;
-        cursorCanvas.height = rect.height;
-        cursorCanvas.style.width = rect.width + "px";
-        cursorCanvas.style.height = rect.height + "px";
-
-        // Позиция и transform такие же, как у maskCanvas
-        cursorCanvas.style.left = maskCanvas.style.left;
-        cursorCanvas.style.top = maskCanvas.style.top;
-        cursorCanvas.style.transform = maskCanvas.style.transform;
-    }
-
-function handleZoom(deltaY, clientX, clientY) {
-    if (!baseImg.width || !baseImg.height) return;
-
-    const factor = deltaY < 0 ? 1.1 : 0.9;
-    let newZoom = currentZoom * factor;
-
-    if (newZoom < MIN_ZOOM) newZoom = MIN_ZOOM;
-    if (newZoom > MAX_ZOOM) newZoom = MAX_ZOOM;
-    if (newZoom === currentZoom) return;
-
-    const canvasRect = maskCanvas.getBoundingClientRect();
-    const oldW = canvasRect.width;
-    const oldH = canvasRect.height;
-
-    if (!oldW || !oldH) return;
-
-    // относительная позиция точки зума внутри канваса (0..1)
-    const relX = (clientX - canvasRect.left) / oldW;
-    const relY = (clientY - canvasRect.top) / oldH;
-
-    const oldZoom = currentZoom;
-    currentZoom = newZoom;
-
-    const displayW = baseImg.width * currentZoom;
-    const displayH = baseImg.height * currentZoom;
-
-    // меняем размер канваса (зум)
-    maskCanvas.style.width = displayW + "px";
-    maskCanvas.style.height = displayH + "px";
-
-    // разница размеров до/после зума
-    const deltaW = displayW - oldW;
-    const deltaH = displayH - oldH;
-
-    // текущий скролл
-    const oldScrollLeft = canvasContainer.scrollLeft;
-    const oldScrollTop  = canvasContainer.scrollTop;
-
-    // компенсируем изменение размеров так,
-    // чтобы точка с relX/relY осталась под той же экранной позицией
-    let newScrollLeft = oldScrollLeft + deltaW * (relX - 0.5);
-    let newScrollTop  = oldScrollTop  + deltaH * (relY - 0.5);
-
-    const maxScrollX = canvasContainer.scrollWidth - canvasContainer.clientWidth;
-    const maxScrollY = canvasContainer.scrollHeight - canvasContainer.clientHeight;
-
-    if (!Number.isFinite(newScrollLeft)) newScrollLeft = 0;
-    if (!Number.isFinite(newScrollTop))  newScrollTop  = 0;
-
-    canvasContainer.scrollLeft = Math.max(0, Math.min(maxScrollX, newScrollLeft));
-    canvasContainer.scrollTop  = Math.max(0, Math.min(maxScrollY, newScrollTop));
-
-    resizeCursorCanvasToMask();
-}
-
-    function redraw() {
-        if (!maskCtx || !maskCanvas) return;
-
-        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-
-        if (baseImg && baseImg.width && baseImg.height) {
-            maskCtx.drawImage(baseImg, 0, 0, maskCanvas.width, maskCanvas.height);
-        }
-
-        if (maskBuffer) {
-            maskCtx.save();
-            const alpha = (lastMaskOpacity || 100) / 100.0;
-            maskCtx.globalAlpha = alpha;
-            maskCtx.drawImage(maskBuffer, 0, 0, maskCanvas.width, maskCanvas.height);
-            maskCtx.restore();
-        }
-    }
-
-    baseImg.onload = () => {
-        const w = baseImg.width;
-        const h = baseImg.height;
-
-        maskCanvas.width = w;
-        maskCanvas.height = h;
-        maskBuffer.width = w;
-        maskBuffer.height = h;
-        maskBufferCtx.clearRect(0, 0, w, h);
-
-        // автофит картинки в видимую область контейнера
-        const containerRect = canvasContainer.getBoundingClientRect();
-        let fitZoom = 1;
-
-        if (containerRect.width > 0 && containerRect.height > 0) {
-            const scaleX = containerRect.width / w;
-            const scaleY = containerRect.height / h;
-            fitZoom = Math.min(scaleX, scaleY);
-        }
-
-        currentZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, fitZoom));
-
-        const displayW = w * currentZoom;
-        const displayH = h * currentZoom;
-
-        maskCanvas.style.width = displayW + "px";
-        maskCanvas.style.height = displayH + "px";
-        maskCanvas.style.maxWidth = "none";
-        maskCanvas.style.maxHeight = "none";
-
-        const cw = containerRect.width;
-        const ch = containerRect.height;
-        canvasContainer.scrollLeft = Math.max(0, (displayW - cw) / 2);
-        canvasContainer.scrollTop = Math.max(0, (displayH - ch) / 2);
-
-        resizeCursorCanvasToMask();
-        setTimeout(() => {
-            redraw();
-        }, 0);
-
-        if (dynamicMaskSrc) { maskImg.src = dynamicMaskSrc; } else { clearMaskBuffer(true); }
-    };
-    baseImg.onerror = () => { };
-
-    maskImg.onload = () => {
-        try {
-            maskBufferCtx.clearRect(0, 0, maskBuffer.width, maskBuffer.height);
-            maskBufferCtx.drawImage(maskImg, 0, 0, maskBuffer.width, maskBuffer.height);
-            redraw();
-        } catch (e) { }
-    };
-
-    maskImg.onerror = () => { };
-
-async function resolveBaseSrcFromMeta() {
-    try {
-        // Запрос meta JSON из temp
-        const url = `/view?filename=${encodeURIComponent(
-            metaFilename
-        )}&type=temp&_t=${Date.now()}`;
-
-        const resp = await api.fetchApi(url, { method: "GET" });
-
-        // Если meta ещё не существует → используем картинку из ноды
-        if (!resp.ok) {
-            dynamicMaskSrc = "";
-            return getNodeInputImage();
-        }
-
-        const text = await resp.text();
-        let meta;
-
-        try {
-            meta = JSON.parse(text);
-        } catch (e) {
-            // битый JSON → fallback
-            dynamicMaskSrc = "";
-            return getNodeInputImage();
-        }
-
-        //
-        // 1️⃣ Проверка соответствия маски текущей картинке
-        //
-        const metaGraphImage = meta?.graph_image || "";
-        const currentGraphImage = getGraphImageKey();
-
-        if (
-            metaGraphImage &&
-            currentGraphImage &&
-            metaGraphImage !== currentGraphImage
-        ) {
-            // Маска относится к другой картинке → игнорируем её
-            dynamicMaskSrc = "";
-            return getNodeInputImage();
-        }
-
-        //
-        // 2️⃣ Загружаем ORIGINAL
-        //
-        const originalPath = meta?.original || "";
-        if (originalPath) {
-            const parts = originalPath.split(/[\\/]/);
-            const originalName = parts[parts.length - 1];
-
-            const params = new URLSearchParams({
-                filename: originalName,
-                type: "temp",
-                subfolder: "",
-            });
-            params.append("_rgbyp", Date.now());
-
-            return `/view?${params.toString()}`;
-        }
-
-        //
-        // 3️⃣ Нет original → fallback к картинке из ноды
-        //
-        return getNodeInputImage();
-
-    } catch (e) {
-        // На любой ошибке — fallback
-        dynamicMaskSrc = "";
-        return getNodeInputImage();
-    }
-}
-
-    resolveBaseSrcFromMeta().then((src) => {
-        baseImg.src = src;
-    });
-
-
-    clearBtn.addEventListener("click", () => {
-        clearMaskBuffer(true);
-    });
-
-    let drawing = false;
-    let lastX = 0;
-    let lastY = 0;
-    let tempTool = null;
-
-    let cursorLastScreenX = null;
-    let cursorLastScreenY = null;
-
-    function getCanvasPos(evt) {
-        const rect = maskCanvas.getBoundingClientRect();
-        const x = ((evt.clientX - rect.left) / rect.width) * maskCanvas.width;
-        const y = ((evt.clientY - rect.top) / rect.height) * maskCanvas.height;
-        return { x, y };
-    }
-
-    function clearCursor() {
-        cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
-        cursorLastScreenX = null;
-        cursorLastScreenY = null;
-    }
-
-    function drawCursor(arg) {
-        if (!maskCanvas || !cursorCanvas) return;
-        const rect = maskCanvas.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-
-        let sx, sy;
-        if (arg && typeof arg.clientX === "number") {
-            sx = arg.clientX - rect.left;
-            sy = arg.clientY - rect.top;
-        } else if (arg && typeof arg.x === "number") {
-            sx = arg.x;
-            sy = arg.y;
-        } else {
-            return;
-        }
-
-        cursorLastScreenX = sx;
-        cursorLastScreenY = sy;
-
-        const brushSize = parseFloat(sizeInput.value) || 10;
-        const scale = rect.width / maskCanvas.width;
-        const radius = (brushSize / 2) * scale;
-
-        cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
-        cursorCtx.beginPath();
-        cursorCtx.arc(sx, sy, radius, 0, Math.PI * 2);
-        cursorCtx.strokeStyle = "#ffffff";
-        cursorCtx.lineWidth = 1;
-        cursorCtx.setLineDash([4, 4]);
-        cursorCtx.stroke();
-    }
-
-    function startDraw(evt) {
-        if (evt.button !== 0 && evt.button !== 2) {
-            return;
-        }
-
-        if (panMode && evt.button === 0) {
-            isPanningDrag = true;
-            panStartX = evt.clientX;
-            panStartY = evt.clientY;
-            panScrollLeft = canvasContainer.scrollLeft;
-            panScrollTop = canvasContainer.scrollTop;
-            maskCanvas.style.cursor = "grabbing";
-            return;
-        }
-
-        if (evt.button === 2) {
-            evt.preventDefault();
-            tempTool = currentTool;
-            currentTool = "eraser";
-            updateToolButtons();
-            const restoreOnce = () => {
-                if (tempTool !== null) {
-                    currentTool = tempTool;
-                    tempTool = null;
-                    updateToolButtons();
-                }
-                window.removeEventListener("mouseup", restoreOnce);
-            };
-            window.addEventListener("mouseup", restoreOnce);
-        }
-
-        drawing = true;
-        const pos = getCanvasPos(evt);
-        lastX = pos.x;
-        lastY = pos.y;
-        drawLine(pos.x, pos.y, true);
-        drawCursor(evt);
-    }
-
-    function stopDraw() {
-        if (isPanningDrag) {
-            isPanningDrag = false;
-            maskCanvas.style.cursor = panMode && isPointerOverCanvas ? "grab" : "none";
-            return;
-        }
-        drawing = false;
-    }
-
-    function drawMove(evt) {
-        drawCursor(evt);
-
-        if (isPanningDrag) {
-            const dx = evt.clientX - panStartX;
-            const dy = evt.clientY - panStartY;
-            canvasContainer.scrollLeft = panScrollLeft - dx;
-            canvasContainer.scrollTop = panScrollTop - dy;
-            resizeCursorCanvasToMask();
-            return;
-        }
-
-        if (!drawing) return;
-        const pos = getCanvasPos(evt);
-        drawLine(pos.x, pos.y, false);
-        lastX = pos.x;
-        lastY = pos.y;
-    }
-
-    function drawLine(x, y, dotOnly) {
-        const size = parseFloat(sizeInput.value) || 10;
-
-        if (currentTool === "eraser") {
-            maskBufferCtx.save();
-            maskBufferCtx.globalCompositeOperation = "destination-out";
-            maskBufferCtx.beginPath();
-            if (dotOnly) {
-                maskBufferCtx.arc(x, y, size / 2, 0, Math.PI * 2);
-                maskBufferCtx.fill();
-            } else {
-                maskBufferCtx.lineCap = "round";
-                maskBufferCtx.lineJoin = "round";
-                maskBufferCtx.lineWidth = size;
-                maskBufferCtx.moveTo(lastX, lastY);
-                maskBufferCtx.lineTo(x, y);
-                maskBufferCtx.stroke();
-            }
-            maskBufferCtx.restore();
-        } else {
-            maskBufferCtx.save();
-            maskBufferCtx.globalCompositeOperation = "source-over";
-            maskBufferCtx.strokeStyle = rgbToCss(currentColor);
-            maskBufferCtx.fillStyle = rgbToCss(currentColor);
-            if (dotOnly) {
-                maskBufferCtx.beginPath();
-                maskBufferCtx.arc(x, y, size / 2, 0, Math.PI * 2);
-                maskBufferCtx.fill();
-            } else {
-                maskBufferCtx.beginPath();
-                maskBufferCtx.lineCap = "round";
-                maskBufferCtx.lineJoin = "round";
-                maskBufferCtx.lineWidth = size;
-                maskBufferCtx.moveTo(lastX, lastY);
-                maskBufferCtx.lineTo(x, y);
-                maskBufferCtx.stroke();
-            }
-            maskBufferCtx.restore();
-        }
-
-        redraw();
-    }
-
-    maskCanvas.addEventListener("mousedown", startDraw);
-    maskCanvas.addEventListener("mousemove", drawMove);
-    maskCanvas.addEventListener("mouseup", stopDraw);
-    maskCanvas.addEventListener("mouseleave", () => {
-        stopDraw();
-        clearCursor();
-    });
-
-    maskCanvas.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-    });
-
-    maskCanvas.addEventListener(
-        "touchstart",
-        (e) => {
-            e.preventDefault();
-            const t = e.touches[0];
-            resizeCursorCanvasToMask();
-            startDraw(t);
-        },
-        { passive: false }
-    );
-
-    maskCanvas.addEventListener(
-        "touchmove",
-        (e) => {
-            e.preventDefault();
-            const t = e.touches[0];
-            drawMove(t);
-        },
-        { passive: false }
-    );
-
-    maskCanvas.addEventListener(
-        "touchend",
-        (e) => {
-            e.preventDefault();
-            stopDraw();
-            clearCursor();
-        },
-        { passive: false }
-    );
-
-    keyHandler = (e) => {
-        if (e.code === "Space") {
-            if (isPointerOverCanvas) {
-                spacePanActive = true;
-                panMode = true;
-                if (!isPanningDrag) {
-                    maskCanvas.style.cursor = "grab";
-                }
-            }
-            e.preventDefault();
-            return;
-        }
-        if (e.code === "KeyZ" && e.shiftKey) {
-            const rect = canvasContainer.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            handleZoom(100, cx, cy);
-            e.preventDefault();
-            return;
-        }
-        if (e.code === "KeyX" && e.shiftKey) {
-            const rect = canvasContainer.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            handleZoom(-100, cx, cy);
-            e.preventDefault();
-            return;
-        }
-
-        if (e.key >= "1" && e.key <= "5") {
-            const idx = parseInt(e.key, 10) - 1;
-            if (colorList[idx]) {
-                currentColor = colorList[idx].color;
-                lastBrushColor = colorList[idx].color;
-                colorSwatches.forEach((s, i) => {
-                    s.style.border = i === idx ? "2px solid #000" : "2px solid transparent";
-                });
-                e.preventDefault();
-            }
-            return;
-        }
-
-        if (e.key === "Escape") {
+    closeIcon.addEventListener("click", closeEditor);
+    overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) {
             closeEditor();
-            e.preventDefault();
-            return;
         }
-
-        if (e.key === "Enter") {
-            saveBtn.click();
-            e.preventDefault();
-            return;
-        }
-
-        if (e.code === "KeyN" && e.shiftKey) {
-            clearMaskBuffer(true);
-            e.preventDefault();
-            return;
-        }
-
-        if (e.code === "KeyA" && e.shiftKey) {
-            let v = parseFloat(sizeInput.value) || 1;
-            let step;
-            if (v <= 20) step = 1;
-            else if (v <= 100) step = 3;
-            else step = 5;
-            v = Math.max(1, v - step);
-            sizeInput.value = String(v);
-            sizeValue.textContent = sizeInput.value;
-            lastBrushSize = v;
-
-            if (cursorLastScreenX !== null && cursorLastScreenY !== null) {
-                drawCursor({ x: cursorLastScreenX, y: cursorLastScreenY });
-            }
-
-            e.preventDefault();
-            return;
-        }
-
-        if (e.code === "KeyD" && e.shiftKey) {
-            let v = parseFloat(sizeInput.value) || 1;
-            let step;
-            if (v <= 20) step = 1;
-            else if (v <= 100) step = 3;
-            else step = 5;
-            v = Math.max(1, v + step);
-            sizeInput.value = String(v);
-            sizeValue.textContent = sizeInput.value;
-            lastBrushSize = v;
-
-            if (cursorLastScreenX !== null && cursorLastScreenY !== null) {
-                drawCursor({ x: cursorLastScreenX, y: cursorLastScreenY });
-            }
-
-            e.preventDefault();
-            return;
-        }
-
-        if (e.code === "KeyW" && e.shiftKey) {
-            let v = parseFloat(opacityInput.value) || 1;
-            v = Math.min(100, v + 5);
-            opacityInput.value = String(v);
-            opacityValue.textContent = opacityInput.value;
-            lastMaskOpacity = v;
-            redraw();
-            e.preventDefault();
-            return;
-        }
-
-        if (e.code === "KeyS" && e.shiftKey) {
-            let v = parseFloat(opacityInput.value) || 1;
-            v = Math.max(1, v - 5);
-            opacityInput.value = String(v);
-            opacityValue.textContent = opacityInput.value;
-            lastMaskOpacity = v;
-            redraw();
-            e.preventDefault();
-            return;
-        }
-    };
-
-    keyUpHandler = (e) => {
-        if (e.code === "Space") {
-            spacePanActive = false;
-            panMode = false;
-
-            if (!isPanningDrag) {
-                maskCanvas.style.cursor = "none";
-            }
-
-            updateToolButtons();
-        }
-    };
-
-    window.addEventListener("keydown", keyHandler);
-    window.addEventListener("keyup", keyUpHandler);
-    window.addEventListener("resize", resizeHandler);
-
-    saveBtn.addEventListener("click", async () => {
-        if (!baseImg.width || !baseImg.height) {
-            alert("Base image has not been loaded yet.");
-            return;
-        }
-
-        const uniqueId = node.properties?.["unique_id"] || node.id || Date.now().toString();
-        const prefix = `RGBYP_${uniqueId}_`;
-        const tempType = "temp";
-
-        const compositeFilename = `${prefix}composite.png`;
-        const maskFilename2 = `${prefix}mask.png`;
-
-        const finalCanvas = document.createElement("canvas");
-        finalCanvas.width = baseImg.width;
-        finalCanvas.height = baseImg.height;
-        const finalCtx = finalCanvas.getContext("2d");
-        finalCtx.drawImage(baseImg, 0, 0);
-
-        const compositeAlpha = (lastMaskOpacity || 100) / 100.0;
-        finalCtx.save();
-        finalCtx.globalAlpha = compositeAlpha;
-        finalCtx.drawImage(maskBuffer, 0, 0);
-        finalCtx.restore();
-        // finalCtx.drawImage(maskBuffer, 0, 0);
-
-        const compositeDataUrl = finalCanvas.toDataURL("image/png");
-        const maskDataUrl = maskBuffer.toDataURL("image/png");
-
-        let uploadedCompositeName = compositeFilename;
-
-        try {
-            const compFile = dataURLtoFile(compositeDataUrl, compositeFilename);
-            const compForm = new FormData();
-            compForm.append("image", compFile);
-            compForm.append("type", tempType);
-            compForm.append("overwrite", "true");
-
-            const compResp = await api.fetchApi("/upload/image", {
-                method: "POST",
-                body: compForm,
-            });
-
-            if (compResp.ok) {
-                const cj = await compResp.json();
-                uploadedCompositeName = cj.name || compositeFilename;
-            }
-        } catch (e) { }
-
-        try {
-            const maskFile = dataURLtoFile(maskDataUrl, maskFilename2);
-            const maskForm = new FormData();
-            maskForm.append("image", maskFile);
-            maskForm.append("type", tempType);
-            maskForm.append("overwrite", "true");
-
-            await api.fetchApi("/upload/image", {
-                method: "POST",
-                body: maskForm,
-            });
-        } catch (e) { }
-
-        const viewUrl = `/view?filename=${encodeURIComponent(
-            uploadedCompositeName
-        )}&type=temp&_t=${Date.now()}`;
-
-        if (!node.imgs) node.imgs = [];
-        if (node.imgs.length === 0) {
-            node.imgs.push({ src: viewUrl });
-        } else {
-            node.imgs[0].src = viewUrl;
-        }
-
-        if (node.image instanceof Image) {
-            node.image.src = viewUrl;
-        }
-        const randomValue = lastMaskOpacity + (Math.random() * 0.002) - 0.001;
-
-        if (node.widgets && Array.isArray(node.widgets)) {
-            const w = node.widgets.find(w => w.name === "updater");
-            if (w) {
-                w.value = randomValue;
-
-                if (!node.properties) node.properties = {};
-                node.properties["updater"] = randomValue;
-
-                if (typeof node.onPropertyChanged === "function") {
-                    node.onPropertyChanged("updater", randomValue);
-                }
-            }
-        }
-
-        // запоминаем, с какой картинкой была сохранена маска
-        if (!node.properties) node.properties = {};
-        node.properties.rgbyp_last_image_key = getNodeImageKey();
-
-        node.setDirtyCanvas?.(true, true);
-        app.graph.setDirtyCanvas(true, true);
-        node.graph?.change?.();
-
-        closeEditor();
     });
+
 }
