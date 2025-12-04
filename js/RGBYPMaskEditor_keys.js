@@ -33,7 +33,7 @@ async function onKeyDownStub(e) {
         if (idx !== null && !e.altKey && !e.metaKey) {
             state.drawColor = idx;
             updateSelectedColorUI(idx);
-            console.log("[RGBYP] Color hotkey -> index", idx);
+            // console.log("[RGBYP] Color hotkey -> index", idx);
             e.preventDefault();
             return;
         }
@@ -107,7 +107,7 @@ async function onKeyDownStub(e) {
 
     
     if (e.key === "Escape") {
-        console.log("[RGBYP] ESC pressed: closing dialog without saving");
+        // console.log("[RGBYP] ESC pressed: closing dialog without saving");
         closeEditor();
         e.preventDefault();
         return;
@@ -309,7 +309,7 @@ function onMaskMouseDown(e) {
         const idx = state.drawColor ?? 0;
         const rgb = colorListRGB[idx]?.color || [255, 0, 0];
         const strokeColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1)`;
-        console.log("[RGBYP] onMaskMouseDown strokeColor:", idx);
+        // console.log("[RGBYP] onMaskMouseDown strokeColor:", idx);
         ctx.strokeStyle = strokeColor;
     }
 
@@ -495,7 +495,7 @@ function updateBrushCursor(e) {
 
     const sizePx = getBrushSizePx(state);
 
-    console.log(`[RGBYP] Brush cursor sizePx: ${sizePx}`);
+    // console.log(`[RGBYP] Brush cursor sizePx: ${sizePx}`);
 
     cursorEl.style.width = sizePx + "px";
     cursorEl.style.height = sizePx + "px";
@@ -792,7 +792,7 @@ export function registerKeyHandlers(scopeElement) {
                 s.drawColor = idx;
                 updateSelectedColorUI(idx);
 
-                console.log("[RGBYP] Color selected by click:", idx);
+                // console.log("[RGBYP] Color selected by click:", idx);
             };
         });
     }

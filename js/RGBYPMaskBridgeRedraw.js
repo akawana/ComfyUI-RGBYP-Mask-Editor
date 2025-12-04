@@ -3,7 +3,7 @@ import { app } from "/scripts/app.js";
 app.registerExtension({
     name: "RGBYPMaskBridgeRedraw",
     init(appInstance) {
-        console.log("[RGBYPMaskBridgeRedraw] INIT extension loaded");
+        // console.log("[RGBYPMaskBridgeRedraw] INIT extension loaded");
 
         const origQueuePrompt = appInstance.queuePrompt?.bind(appInstance);
         if (!origQueuePrompt) {
@@ -12,11 +12,11 @@ app.registerExtension({
         }
 
         appInstance.queuePrompt = async function (...args) {
-            console.log("[RGBYPMaskBridgeRedraw] queuePrompt → START");
+            // console.log("[RGBYPMaskBridgeRedraw] queuePrompt → START");
 
             const result = await origQueuePrompt(...args);
 
-            console.log("[RGBYPMaskBridgeRedraw] queuePrompt → FINISHED, now checking RGBYPMaskBridge nodes…");
+            // console.log("[RGBYPMaskBridgeRedraw] queuePrompt → FINISHED, now checking RGBYPMaskBridge nodes…");
 
             try {
                 await redrawRGBYPMaskBridgeNodes(appInstance);
@@ -24,14 +24,14 @@ app.registerExtension({
                 console.error("[RGBYPMaskBridgeRedraw] EXCEPTION during redraw:", e);
             }
 
-            console.log("[RGBYPMaskBridgeRedraw] queuePrompt → END");
+            // console.log("[RGBYPMaskBridgeRedraw] queuePrompt → END");
             return result;
         };
     },
 });
 
 async function redrawRGBYPMaskBridgeNodes(appInstance) {
-    console.log("—————— [RGBYPMaskBridgeRedraw] redraw start ——————");
+    // console.log("—————— [RGBYPMaskBridgeRedraw] redraw start ——————");
 
     const graph = appInstance?.graph;
     if (!graph) {
@@ -45,15 +45,15 @@ async function redrawRGBYPMaskBridgeNodes(appInstance) {
     }
 
     const nodes = graph._nodes;
-    console.log(`[RGBYPMaskBridgeRedraw] total nodes in graph: ${nodes.length}`);
+    // console.log(`[RGBYPMaskBridgeRedraw] total nodes in graph: ${nodes.length}`);
 
     const rgbypNodes = nodes.filter((node) => node?.type === "RGBYPMaskBridge");
 
-    console.log(`[RGBYPMaskBridgeRedraw] total RGBYPMaskBridge nodes found: ${rgbypNodes.length}`);
+    // console.log(`[RGBYPMaskBridgeRedraw] total RGBYPMaskBridge nodes found: ${rgbypNodes.length}`);
 
     if (rgbypNodes.length === 0) {
-        console.log("[RGBYPMaskBridgeRedraw] no RGBYPMaskBridge nodes → nothing to redraw");
-        console.log("—————— [RGBYPMaskBridgeRedraw] redraw end ——————");
+        // console.log("[RGBYPMaskBridgeRedraw] no RGBYPMaskBridge nodes → nothing to redraw");
+        // console.log("—————— [RGBYPMaskBridgeRedraw] redraw end ——————");
         return;
     }
 
@@ -71,15 +71,15 @@ async function redrawRGBYPMaskBridgeNodes(appInstance) {
     }
 
     if (updatedCount > 0 && graph.setDirtyCanvas) {
-        console.log(
+/*         console.log(
             `[RGBYPMaskBridgeRedraw] forcing canvas redraw, previews updated for ${updatedCount} node(s)`
         );
-        graph.setDirtyCanvas(true, true);
+ */        graph.setDirtyCanvas(true, true);
     } else {
-        console.log("[RGBYPMaskBridgeRedraw] no previews updated → canvas redraw skipped");
+        // console.log("[RGBYPMaskBridgeRedraw] no previews updated → canvas redraw skipped");
     }
 
-    console.log("—————— [RGBYPMaskBridgeRedraw] redraw end ——————");
+    // console.log("—————— [RGBYPMaskBridgeRedraw] redraw end ——————");
 }
 
 async function tryUpdateCompositePreviewForNode(node) {
@@ -95,12 +95,12 @@ async function tryUpdateCompositePreviewForNode(node) {
     }
 
     if (!currentImg || !currentImg.src) {
-        console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: no current img/src → skip`);
+        // console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: no current img/src → skip`);
         return false;
     }
 
     const src = currentImg.src;
-    console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: current src='${src}'`);
+    // console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: current src='${src}'`);
 
     // Try to extract filename from query parameters (view?filename=...)
     let filename = null;
@@ -129,7 +129,7 @@ async function tryUpdateCompositePreviewForNode(node) {
         return false;
     }
 
-    console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: resolved filename='${filename}'`);
+    // console.log(`[RGBYPMaskBridgeRedraw] node id=${node.id}: resolved filename='${filename}'`);
 
     // If the file is already composite, just use it as is
     let compositeFilename;
@@ -142,19 +142,19 @@ async function tryUpdateCompositePreviewForNode(node) {
         compositeFilename = `${baseName}_rgbyp_composite.png`;
     }
 
-    console.log(
+/*     console.log(
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: composite filename candidate='${compositeFilename}'`
     );
-
+ */
     // URL for checking and loading composite from input/rgbyp
     const compositeUrl = `/view?filename=${encodeURIComponent(
         compositeFilename
     )}&type=input&subfolder=rgbyp&_t=${Date.now()}`;
 
-    console.log(
+/*     console.log(
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: checking composite URL='${compositeUrl}'`
     );
-
+ */
     // Try to request the image; if 404 — composite does not exist yet
     let resp;
     try {
@@ -168,16 +168,16 @@ async function tryUpdateCompositePreviewForNode(node) {
     }
 
     if (!resp.ok) {
-        console.log(
+/*         console.log(
             `[RGBYPMaskBridgeRedraw] node id=${node.id}: composite not found (status ${resp.status}) → skip`
         );
-        return false;
+ */        return false;
     }
 
-    console.log(
+/*     console.log(
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: composite EXISTS → updating node preview`
     );
-
+ */
     // We will not use resp.body, we just create an Image with the same URL
     const img = new Image();
     img.src = compositeUrl;
@@ -189,9 +189,9 @@ async function tryUpdateCompositePreviewForNode(node) {
         node.imgs = [img];
     }
 
-    console.log(
+/*     console.log(
         `[RGBYPMaskBridgeRedraw] node id=${node.id}: node.img/node.imgs updated to composite`
     );
-
+ */
     return true;
 }

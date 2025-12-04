@@ -51,13 +51,13 @@ export function initBaseImageAndCanvas() {
                 const text = await resp.text();
                 try {
                     meta = JSON.parse(text);
-                    console.log("[RGBYP] initBaseImageAndCanvas: loaded meta", meta);
+                    // console.log("[RGBYP] initBaseImageAndCanvas: loaded meta", meta);
                 } catch (e) {
                     console.warn("[RGBYP] initBaseImageAndCanvas: cannot parse meta json", e);
                     meta = null;
                 }
             } else {
-                console.log("[RGBYP] initBaseImageAndCanvas: meta not found, fallback to node image", resp.status);
+                // console.log("[RGBYP] initBaseImageAndCanvas: meta not found, fallback to node image", resp.status);
             }
         } catch (e) {
             console.warn("[RGBYP] initBaseImageAndCanvas: error loading meta", e);
@@ -77,10 +77,12 @@ export function initBaseImageAndCanvas() {
                 : "";
 
             if (!normalizedCurrent || !normalizedOriginal || normalizedCurrent !== normalizedOriginal) {
-                console.log(
+
+/*                 console.log(
                     "[RGBYP] initBaseImageAndCanvas: meta.original does not match current node image -> ignore meta",
                     { normalizedCurrent, normalizedOriginal }
                 );
+ */                
                 meta = null;
             }
         } else {
@@ -112,7 +114,7 @@ export function initBaseImageAndCanvas() {
                     maskImg = null;
                 }
             } else {
-                console.log("[RGBYP] initBaseImageAndCanvas: meta.mask empty -> start with clean mask");
+                // console.log("[RGBYP] initBaseImageAndCanvas: meta.mask empty -> start with clean mask");
                 maskImg = null;
             }
         }
@@ -136,12 +138,12 @@ export function initBaseImageAndCanvas() {
         const imgW = baseImg.naturalWidth || baseImg.width;
         const imgH = baseImg.naturalHeight || baseImg.height;
 
-        console.log("[RGBYP] Loaded base image size:", imgW, imgH);
+        // console.log("[RGBYP] Loaded base image size:", imgW, imgH);
 
         const containerDiv = state.canvasContainer;
         const prevDisplayW = containerDiv.clientWidth || containerDiv.width || imgW;
         const prevDisplayH = containerDiv.clientHeight || containerDiv.height || imgH;
-        console.log("[RGBYP] Previous container size:", prevDisplayW, prevDisplayH);
+        // console.log("[RGBYP] Previous container size:", prevDisplayW, prevDisplayH);
 
         // base size for zoom
         state.zoomPrevWidth = prevDisplayW;
@@ -174,10 +176,10 @@ export function initBaseImageAndCanvas() {
         const boxW = outerContainer?.clientWidth || prevDisplayW;
         const boxH = outerContainer?.clientHeight || prevDisplayH;
 
-        console.log("[RGBYP] Container size:", boxW, boxH);
+        // console.log("[RGBYP] Container size:", boxW, boxH);
         if (boxW && boxH) {
             const scale = Math.min(boxW / imgW, boxH / imgH);
-            console.log("[RGBYP] Calculated scale:", scale);
+            // console.log("[RGBYP] Calculated scale:", scale);
 
             const cssW = imgW * scale;
             const cssH = imgH * scale;
@@ -186,7 +188,7 @@ export function initBaseImageAndCanvas() {
             containerDiv.style.height = cssH + "px";
         }
 
-        console.log("[RGBYP] baseImg + mask (if any) loaded, canvases resized and zoomed out");
+        // console.log("[RGBYP] baseImg + mask (if any) loaded, canvases resized and zoomed out");
     })().catch((e) => {
         console.error("[RGBYP] initBaseImageAndCanvas async error:", e);
     });
@@ -253,7 +255,7 @@ async function uploadComfyFile(file, type = "temp", subfolder) {
             return null;
         }
 
-        console.log("[RGBYP] uploadComfyFile OK:", file.name, "->", info);
+        // console.log("[RGBYP] uploadComfyFile OK:", file.name, "->", info);
         // info is usually { name, subfolder, type: 'temp' }
         return info;
     } catch (err) {
@@ -302,7 +304,7 @@ export async function saveMask() {
     // JSON name by node id
     const metaFilename = `rgbyp_${node.id}.json`;
 
-    console.log("[****] saveMask: determined filenames:", { metaFilename, desiredOriginalName, desiredMaskName, desiredCompositeName });
+    // console.log("[****] saveMask: determined filenames:", { metaFilename, desiredOriginalName, desiredMaskName, desiredCompositeName });
 
     // ---------- 2. Try to read existing meta JSON ----------
     let meta = null;
@@ -329,7 +331,7 @@ export async function saveMask() {
             maskName = meta.mask;
             compositeName = meta.composite || desiredCompositeName;
 
-            console.log("[RGBYP] saveMask: reuse existing meta, only overwrite mask & composite");
+            // console.log("[RGBYP] saveMask: reuse existing meta, only overwrite mask & composite");
         }
     }
 
@@ -349,14 +351,14 @@ export async function saveMask() {
         // ❌ REMOVED: SHA calculation
         // const sha = await computeSHA1FromImage(baseImg);
 
-        console.log("[RGBYP] saveMask: original saved", originalName);
+        // console.log("[RGBYP] saveMask: original saved", originalName);
     }
 
     // ---------- 5. Save mask ----------
     const maskDataUrl = maskCanvas.toDataURL("image/png");
     const maskFile = dataURLtoFile(maskDataUrl, maskName);
     await uploadComfyFile(maskFile, "temp");
-    console.log("[RGBYP] saveMask: mask saved", maskName);
+    // console.log("[RGBYP] saveMask: mask saved", maskName);
 
     // ---------- 6. Save composite ----------
     const compCanvas = document.createElement("canvas");
@@ -382,7 +384,7 @@ export async function saveMask() {
     const compositeFile = dataURLtoFile(compositeDataUrl, compositeName);
     await uploadComfyFile(compositeFile, "temp");
     await uploadComfyFile(compositeFile, "input", "rgbyp");
-    console.log("[RGBYP] saveMask: composite saved", compositeName, "opacity =", state.maskOpacity);
+    // console.log("[RGBYP] saveMask: composite saved", compositeName, "opacity =", state.maskOpacity);
 
     // ---------- 7. Save / update meta JSON ----------
     if (!reuseExistingNames) {
@@ -406,17 +408,17 @@ export async function saveMask() {
         });
 
         await uploadComfyFile(metaFile, "temp");
-        console.log("[RGBYP] saveMask: meta json written", metaFilename, metaObj);
+        // console.log("[RGBYP] saveMask: meta json written", metaFilename, metaObj);
 
         setNodeState(node.id, {
             tempOriginal: originalName,
             tempMask: maskName,
             tempComposite: compositeName,
         });
-        console.log("[NODE STATE] saveMask: temp paths:", getNodeState(node.id).tempComposite);
+        // console.log("[NODE STATE] saveMask: temp paths:", getNodeState(node.id).tempComposite);
 
     } else {
-        console.log("[RGBYP] saveMask: meta json left unchanged", metaFilename);
+        // console.log("[RGBYP] saveMask: meta json left unchanged", metaFilename);
     }
 
     // ---------- 8. Write paths into state for updatePreview ----------
@@ -460,7 +462,7 @@ export async function updatePreview() {
         return;
     }
 
-    console.log("[updatePreview] updatePreview: start");
+    // console.log("[updatePreview] updatePreview: start");
 
     const compositeName = state.tempComposite;
     if (!compositeName) {
@@ -484,7 +486,7 @@ export async function updatePreview() {
         Date.now();
 
     const img = new Image();
-    console.log("[updatePreview] updatePreview: loading composite from", viewUrl);
+    // console.log("[updatePreview] updatePreview: loading composite from", viewUrl);
 
     img.onload = () => {
         // ✅ OLD LOGIC — update node preview
@@ -499,7 +501,7 @@ export async function updatePreview() {
             app.graph.setDirtyCanvas(true, true);
         }
 
-        console.log("[updatePreview] updatePreview: preview updated successfully", viewUrl);
+        // console.log("[updatePreview] updatePreview: preview updated successfully", viewUrl);
 
         // ✅ EXTRA LOGIC ONLY FOR FOREIGN NODES
         if (!isOurNode) {
@@ -518,10 +520,11 @@ export async function updatePreview() {
                 );
 
                 if (imageWidget) {
-                    console.log(
+/*                     console.log(
                         "[updatePreview] updatePreview: updating image widget to",
                         annotatedPath
                     );
+ */                    
                     imageWidget.value = annotatedPath;
 
                     // If the widget has a callback — give it a chance to react
@@ -542,10 +545,11 @@ export async function updatePreview() {
                         app.graph.setDirtyCanvas(true, true);
                     }
                 } else {
-                    console.log(
+/*                     console.log(
                         "[updatePreview] updatePreview: no image widget found on foreign node",
                         nodeType
                     );
+ */                    
                 }
             }
         }
@@ -582,10 +586,10 @@ export async function updatePreview() {
 
                 updaterWidget.value = newVal;
 
-                console.log(
+/*                 console.log(
                     `[updatePreview] updater widget set to ${newVal.toFixed(6)} (old=${oldVal.toFixed(6)}, opacity=${state.maskOpacity}, rnd=${rnd.toFixed(6)}, attempts=${attempts})`
                 );
-
+ */
                 try {
                     if (typeof updaterWidget.callback === "function") {
                         updaterWidget.callback(updaterWidget.value, app, node, updaterWidget);
