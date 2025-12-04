@@ -475,7 +475,7 @@ export async function updatePreview() {
         (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
     const isOurNode =
         nodeType === "RGBYPMaskBridge" ||
-        nodeType === "LoadImageWithFileData";
+        nodeType === "RGBYPLoadImage";
 
     // URL for preview (as before)
     const viewUrl =

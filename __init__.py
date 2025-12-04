@@ -6,8 +6,8 @@ WEB_DIRECTORY = "./js"
 from .nodes.RGBYPMaskBridge import NODE_CLASS_MAPPINGS as RGBYP_BR_MAPPINGS
 from .nodes.RGBYPMaskBridge import NODE_DISPLAY_NAME_MAPPINGS as RGBYP_BR_DISPLAY
 
-from .nodes.LoadImageWithFileData import NODE_CLASS_MAPPINGS as LI_MAPPINGS
-from .nodes.LoadImageWithFileData import NODE_DISPLAY_NAME_MAPPINGS as LI_DISPLAY
+from .nodes.RGBYPLoadImage import NODE_CLASS_MAPPINGS as LI_MAPPINGS
+from .nodes.RGBYPLoadImage import NODE_DISPLAY_NAME_MAPPINGS as LI_DISPLAY
 
 from .nodes.RGBYPMaskToRegularMasks import NODE_CLASS_MAPPINGS as TOM_MAPPINGS
 from .nodes.RGBYPMaskToRegularMasks import NODE_DISPLAY_NAME_MAPPINGS as TOM_DISPLAY

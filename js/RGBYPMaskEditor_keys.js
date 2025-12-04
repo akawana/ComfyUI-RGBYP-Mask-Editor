@@ -433,7 +433,7 @@ function adjustMaskOpacityByStep(direction) {
 
 
 function clampBrushSize(size) {
-    return Math.max(1, Math.min(size, 300));
+    return Math.max(1, Math.min(size, 400));
 }
 
 function adjustBrushSizeByStep(direction) {

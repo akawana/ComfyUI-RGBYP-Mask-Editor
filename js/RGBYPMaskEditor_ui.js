@@ -311,7 +311,7 @@ export function openMaskEditor(node) {
         return row;
     }
 
-    rightPanel.appendChild(makeSliderRow("Brush size", 1, 200, 50, " px"));
+    rightPanel.appendChild(makeSliderRow("Brush size", 1, 400, 50, " px"));
     rightPanel.appendChild(makeSliderRow("Opacity", 0, 100, 75, " %"));
 
 

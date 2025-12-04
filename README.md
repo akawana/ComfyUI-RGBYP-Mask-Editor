@@ -52,7 +52,7 @@ Fill the mask horizontally:
 
 ---
 
-## LoadImageWithFileData
+## RGBYPLoadImage
 A standard image-loading node that also outputs the RGBYP mask (or a 64×64 black placeholder if no mask was drawn).
 
 Additional outputs:

@@ -33,7 +33,7 @@ export function getNodeState(nodeId) {
             isDrawing: false,
             drawLastX: 0,
             drawLastY: 0,
-            drawBrushSize: 40,
+            drawBrushSize: 50,
             drawColor: 0,
             colorButtons: [],
             lastCursorClientX: 0,
