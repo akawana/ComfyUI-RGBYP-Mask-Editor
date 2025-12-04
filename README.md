@@ -1,12 +1,12 @@
-## ?? Other My Nodes
+## Other My Nodes
 
-### ?? Utilities for working with Lists and toggling groups
+### Utilities for working with Lists and toggling groups
 https://github.com/akawana/ComfyUI-Utils-extra
 
-### ?? Extra shortcuts for editing texts and prompts + text splitting for Regional Prompts
+### Extra shortcuts for editing texts and prompts + text splitting for Regional Prompts
 https://github.com/akawana/ComfyUI-Keybinding-extra
 
-### ?? RGBYP 5-color mask editor
+### RGBYP 5-color mask editor
 https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor
 
 ---
