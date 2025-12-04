@@ -39,7 +39,7 @@ class RGBYPMaskBridge:
     CATEGORY = "image/mask"
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image", "rgbyp_mask")
-    OUTPUT_NODE = True
+    OUTPUT_NODE = False
     FUNCTION = "execute"
 
     # ---------- helpers ----------

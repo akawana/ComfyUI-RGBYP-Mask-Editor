@@ -1,5 +1,3 @@
-// Changes in RGBYPMaskEditor_io.js
-// Add this import if not already present (it's already there)
 import { api } from "../../scripts/api.js";
 import { app } from "../../scripts/app.js";
 
@@ -7,25 +5,6 @@ import { GP } from "./RGBYPMaskEditor.js";
 import { getNodeState } from "./RGBYPMaskEditor.js";
 import { setNodeState } from "./RGBYPMaskEditor.js";
 
-// Existing dataURLtoFile remains unchanged
-/* async function computeSHA1FromImage(img) {
-    return new Promise((resolve) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-
-        canvas.toBlob(async (blob) => {
-            const arrayBuffer = await blob.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest("SHA-1", arrayBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-            resolve(hashHex);
-        }, "image/png");
-    });
-}
- */
 function loadImageFromUrl(url) {
     return new Promise((resolve, reject) => {
         const img = new Image();

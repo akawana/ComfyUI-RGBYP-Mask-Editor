@@ -4,8 +4,9 @@ RGB + Yellow + Pink 5-color mask editor for ComfyUI
 ## Overview
 **RGBYP Mask Editor** is a custom JavaScript node that adds a full-featured color mask editor with 5 channels (RGB + Yellow + Pink).
 
-The node saves its working files inside `/ComfyUI/temp/`, which allows masks to persist even after refreshing the browser page.  
+The node saves its working files inside `/ComfyUI/temp/ and some in /ComfyUI/input/rgbyp/`, which allows masks to persist even after refreshing the browser page.  
 ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI.
+⚠️ All files inside `/input/rgbyp/` can be deleted.
 
 The editor works on any image node (Load Image, Preview, etc.), but the package also includes special nodes that directly output RGBYP masks as separate images:
 
@@ -20,12 +21,14 @@ The editor opens from the **Right-Click menu** on nodes containing images.
 The menu entry appears near the top.
 
 ### Keyboard Shortcuts
-- **1 / 2 / 3 / 4 / 5** — switch color  
+- **1, 2, 3, 4, 5** — switch color. Also works with SHIFT+number
 - **SHIFT + A / D** — brush size  
 - **SHIFT + W / S** — mask opacity  
 - **SHIFT + Z / X** — zoom  
+- **SHIFT + C** — zoom to fit 
 - **SHIFT + N** — clear mask  
-- **SPACE (hold)** — pan the image  
+- **SHIFT + V** — auto masking
+- **SHIFT+SPACE (hold)** — pan the image. Also without SHIFT.
 - **ENTER** — save mask & close  
 - **ESC** — cancel & close
 
@@ -53,16 +56,32 @@ Fill the mask horizontally:
 A standard image-loading node that also outputs the RGBYP mask (or a 64×64 black placeholder if no mask was drawn).
 
 Additional outputs:
-- **dir_path** — directory path without filename  
-- **file_path** — full path including filename  
+- **file_path** — full path excluding filename  
 - **file_name** — filename without extension  
-- **file_name_ext** — filename with extension  
 
 ---
 
 ## RGBYPMaskBridge
 Passes the input image through and allows drawing an RGBYP mask directly on it.  
 Outputs both the image and the mask.
+
+This node includes a parameter: **`clear_on_size_change`**
+
+- **`false`** – the previous mask is always preserved and will be applied to any new input image, even if the new image has a different resolution.  
+  This is the recommended mode. You can manually clear the mask in the editor when needed.
+
+- **`true`** – the mask will be cleared (destroyed) whenever the input image size changes.
+
+---
+
+#### Important: `updater` widget
+
+> ⚠️ **Do not touch the `updater` widget.**
+
+- It is used **only for internal editor logic**.  
+- Do not change its value.  
+- Do not connect anything to it.  
+- Just ignore it in your graphs.
 
 ---
 

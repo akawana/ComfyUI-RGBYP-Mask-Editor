@@ -14,54 +14,54 @@ class LoadImageWithFileData:
 
     LOGIC:
 
-    1. JS preview node may alter the file name by adding a suffix:
-         "_<какой-то_id>__rgbyp"
-       например:
-         исходный файл:   iii_2.png
-         превью-файл:     iii_2_108__rgbyp.png
+    1. The JS preview node may alter the filename by adding a suffix:
+         "_<some_id>__rgbyp"
+       For example:
+         original file:   iii_2.png
+         preview file:    iii_2_108__rgbyp.png
 
-       We need to restore the base name "iii_2" и игнорировать этот хвост.
+       We need to restore the base name "iii_2" and ignore this suffix.
 
-    2. meta.json ВСЕГДА называется:
-         <чистое_имя_БЕЗ_РАСШИРЕНИЯ>_<unique_id>_meta.json
+    2. meta.json is ALWAYS named as:
+         <clean_name_WITHOUT_EXTENSION>_<unique_id>_meta.json
 
-       Пример:
-         базовое имя:  iii_2
-         unique_id:    108
-         meta.json:    iii_2_108_meta.json   (лежат в temp)
+       Example:
+         base name:   iii_2
+         unique_id:   108
+         meta.json:   iii_2_108_meta.json   (stored in temp)
 
     3. meta.json contains the following fields:
          {
-             "original": "<путь или имя файла с оригиналом>",
-             "mask": "<путь или имя файла с маской>",
-             "composite": "<путь или имя файла с запечённой маской>",
+             "original": "<path or filename of the original image>",
+             "mask": "<path or filename of the mask image>",
+             "composite": "<path or filename of the baked composite image>",
              ...
          }
 
        Values may be:
          - absolute paths
-         - or filenames in temp (относительными к temp)
+         - or filenames in temp (relative to temp)
 
     4. Node outputs:
 
        - image (IMAGE):
-            taken from meta["original"] (картинка в temp).
-            If meta.json is missing или original не найден/не грузится —
-            используется стандартный результат LoadImage (исходная картинка).
+            taken from meta["original"] (image from temp).
+            If meta.json is missing or original is missing/fails to load —
+            the standard LoadImage result (the original image) is used.
 
        - rgbyp_mask (IMAGE):
-            taken from meta["mask"] (картинка в temp).
-            If meta.json is missing или mask не найден/пустой/не грузится —
-            a black 64x64 image is returned 64×64.
+            taken from meta["mask"] (image from temp).
+            If meta.json is missing or mask is missing/empty/fails to load —
+            a black 64×64 image is returned.
 
        - mask (MASK):
-            стандартная маска из LoadImage.
+            the standard mask from LoadImage.
 
        - file_path (STRING):
-            абсолютный путь к исходной картинке (как у стандартной LoadImage).
+            absolute path to the source image (same as standard LoadImage).
 
        - file_name (STRING):
-            имя исходной картинки без расширения (сырое, до очистки).
+            the raw original filename without extension (before any cleanup).
     """
 
     @classmethod
@@ -86,7 +86,7 @@ class LoadImageWithFileData:
 
         return base
 
-    DESCRIPTION = "Loads an image, reads baked original/mask from temp via <base_name>_<unique_id>_meta.json, and outputs helper file info."
+    DESCRIPTION = "Loads an image, outputs RGBYP mask, and outputs helper file name and path."
     CATEGORY = getattr(nodes.LoadImage, "CATEGORY", "image")
 
     RETURN_TYPES = ("IMAGE", "IMAGE", "MASK", "STRING", "STRING")
@@ -98,7 +98,7 @@ class LoadImageWithFileData:
         "file_name",
     )
 
-    OUTPUT_NODE = True
+    OUTPUT_NODE = False
     FUNCTION = "load_image"
 
     # ------------------------------------------------------------------
@@ -107,12 +107,12 @@ class LoadImageWithFileData:
     @staticmethod
     def _normalize_base_name(raw_name: str) -> str:
         """
-        Converts a name like 'iii_2_108__rgbyp' back into base name 'iii_2'.
+        Converts a name like 'iii_2_108__rgbyp' back into the base name 'iii_2'.
 
         Rules:
-        1) Если есть хвост '__rgbyp' — срезаем его.
-        2) После этого, если имя оканчивается на '_<digits>' — тоже срезаем
-           (это тот ID, который навешивает JS для превью).
+        1) If the name ends with the suffix '__rgbyp' — remove it.
+        2) After that, if the remaining name ends with '_<digits>' — remove that too
+           (this is the ID added by the JS preview logic).
 
         Examples:
           'iii_2_108__rgbyp' -> 'iii_2'
@@ -124,12 +124,12 @@ class LoadImageWithFileData:
 
         base = raw_name
 
-        # 1. Убираем хвост "__rgbyp"
+        # 1. Remove the "__rgbyp" suffix
         preview_suffix = "__rgbyp"
         if base.endswith(preview_suffix):
             base = base[: -len(preview_suffix)]
 
-        # 2. Убираем концеовой "_<digits>", если есть
+        # 2. Remove the trailing "_<digits>" if present
         idx = base.rfind("_")
         if idx != -1:
             tail = base[idx + 1 :]
@@ -144,11 +144,11 @@ class LoadImageWithFileData:
 
             <base_name>_<unique_id>_meta.json
 
-        где base_name — уже очищенное базовое имя картинки (без .png и без хвостов от JS).
+        where base_name is the cleaned base name of the image (without .png and without JS suffixes).
 
         Returns:
             (temp_dir, meta_path, original_path, mask_path, composite_path)
-            - *_path могут быть None, если их нет или meta.json отсутствует.
+            - *_path may be None if they do not exist or if meta.json is missing.
         """
         temp_dir = folder_paths.get_temp_directory()
         os.makedirs(temp_dir, exist_ok=True)
@@ -201,15 +201,15 @@ class LoadImageWithFileData:
 
     def _load_image_from_path(self, path, ref_tensor=None, label=""):
         """
-        Loads image from file как IMAGE-тензор (1,H,W,C) в диапазоне [0,1].
+        Loads an image file as an IMAGE tensor (1, H, W, C) in the [0,1] range.
 
-        Сейчас используем RGBA, чтобы сохранялась альфа (прозрачный фон маски).
-        Если PNG без альфы, будет обычный RGB.
+        Currently RGBA is used to preserve alpha (transparent mask background).
+        If the PNG has no alpha channel, it becomes standard RGB.
 
-        Если передан ref_tensor, под него matches device/dtype,
-        а размер по возможности тоже синхронизируется.
+        If ref_tensor is provided, device/dtype will match it,
+        and the size will be synchronized when possible.
 
-        label — строка для логов (например 'original' или 'mask').
+        label — a string used for logging (e.g. 'original' or 'mask').
         """
         if not path or not os.path.isfile(path):
             print(
@@ -252,8 +252,8 @@ class LoadImageWithFileData:
 
     def _make_black_64(self, ref_tensor):
         """
-        Creates a black image 64×64 (IMAGE) на том же device/dtype,
-        что и ref_tensor.
+        Creates a 64×64 black image (IMAGE) on the same device/dtype
+        as ref_tensor.
         """
         device = getattr(ref_tensor, "device", "cpu")
         dtype = getattr(ref_tensor, "dtype", torch.float32)
@@ -306,10 +306,10 @@ class LoadImageWithFileData:
             f"temp_dir='{temp_dir}', jsonFileName='{jsonFileName}', json_path='{json_path}'"
         )
 
-        # 1.3 Сохраняем полный путь к выбранной картинке в переменной filePath
+        # 1.3 Save the full path of the selected image into the variable filePath
         filePath = dir_path
 
-        # 1.4 Сохраняем имя файла картинки без расширения в переменной fileName
+        # 1.4 Save the image filename without extension into the variable fileName
         fileName = imageOriginalName
 
         # 2. Check if exists в папке temp json с именем jsonFileName

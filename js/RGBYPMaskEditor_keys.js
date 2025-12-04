@@ -2,27 +2,6 @@ import { GP, getNodeState } from "./RGBYPMaskEditor.js"
 import { colorListRGB, updateToolButtonsHighlight, updateSelectedColorUI } from "./RGBYPMaskEditor_ui.js";
 import { saveMask, updatePreview } from "./RGBYPMaskEditor_io.js";
 
-/**
- * Centralized hotkey stubs for RGBYP Mask Editor.
- * All handlers are intentionally empty.
- */
-async function computeSHA1FromImage(img) {
-    return new Promise((resolve) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-
-        canvas.toBlob(async (blob) => {
-            const arrayBuffer = await blob.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest("SHA-1", arrayBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-            resolve(hashHex);
-        }, "image/png");
-    });
-}
 
 const closeEditor = () => {
     const state = getNodeState(GP.baseNode.id);
@@ -30,10 +9,10 @@ const closeEditor = () => {
     const dialog = state.dialogElement;
     const overlay = state.overlayDialog;
 
-    // translated comment
+    
     unregisterKeyHandlers(dialog);
 
-    // translated comment
+    
     if (overlay && overlay.parentNode) {
         overlay.parentNode.removeChild(overlay);
     }
@@ -62,7 +41,7 @@ async function onKeyDownStub(e) {
 
 
     // Space  : temporary pan
-    // translated comment
+    
     if (e.code === "Space") {
         if (state && !state.spaceScrollActive) {
             state.spaceScrollActive = true;
@@ -82,11 +61,11 @@ async function onKeyDownStub(e) {
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
 
-        // translated comment
+        
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        // translated comment
+        
         applyZoomAt(state, cx, cy, +100);
 
         e.preventDefault();
@@ -104,14 +83,14 @@ async function onKeyDownStub(e) {
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        // translated comment
+        
         applyZoomAt(state, cx, cy, -100);
 
         e.preventDefault();
         return;
     }
 
-    // translated comment
+    
     if (e.code === "KeyV" && e.shiftKey) {
         if (!state) return;
 
@@ -126,7 +105,7 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    // translated comment
+    
     if (e.key === "Escape") {
         console.log("[RGBYP] ESC pressed: closing dialog without saving");
         closeEditor();
@@ -134,10 +113,10 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    // translated comment
+    
     if (e.key === "Enter") {
         try {
-            // translated comment
+            
             await saveMask();
             updatePreview();
         } catch (err) {
@@ -167,7 +146,7 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    // translated comment
+    
     if (e.code === "KeyD" && e.shiftKey) {
         adjustBrushSizeByStep(1);
         e.preventDefault();
@@ -208,19 +187,19 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     const prevCssH = parseFloat(container.style.height) || rect.height;
     if (!prevCssW || !prevCssH) return;
 
-    // translated comment
+    
     const xOnCanvas = centerClientX - rect.left;
     const yOnCanvas = centerClientY - rect.top;
     const relX = xOnCanvas / prevCssW;
     const relY = yOnCanvas / prevCssH;
 
-    // translated comment
+    
     if (!state.zoomPrevWidth || !state.zoomPrevHeight) {
         state.zoomPrevWidth = prevCssW;
         state.zoomPrevHeight = prevCssH;
     }
 
-    // translated comment
+    
     const factor = deltaY < 0 ? 1.1 : 1 / 1.1;
 
     const oldZoom = state.zoom || 1;
@@ -247,8 +226,8 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     panel.scrollLeft += dx;
     panel.scrollTop += dy;
 
-    // translated comment
-    // translated comment
+    
+    
     if (cursorEvent) {
         updateBrushCursor(cursorEvent);
     }
@@ -259,7 +238,7 @@ function onWheelZoom(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state) return;
 
-    // translated comment
+    
     e.preventDefault();
 
     applyZoomAt(state, e.clientX, e.clientY, e.deltaY, e);
@@ -288,7 +267,7 @@ function getCanvasCoords(e, canvas) {
     return { x, y };
 }
 
-// translated comment
+
 function onMaskMouseDown(e) {
     const state = getNodeState(GP.baseNode.id);
     if (state.currentTool === "Scroll") {
@@ -296,19 +275,19 @@ function onMaskMouseDown(e) {
         return;
     }
 
-    // translated comment
-    // translated comment
+    
+    
     if (state.currentTool === "Erase") {
         state.drawMode = "Erase";
     } else {
-        // translated comment
+        
         state.drawMode = (e.button === 2) ? "Erase" : "Paint";
     }
 
     const canvas = state.maskCanvas;
     if (!canvas) return;
 
-    // translated comment
+    
     if (e.button !== 0 && e.button !== 2) return;
 
     e.preventDefault();
@@ -321,7 +300,7 @@ function onMaskMouseDown(e) {
 
     const ctx = canvas.getContext("2d");
 
-    // translated comment
+    
     if (state.drawMode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
         ctx.strokeStyle = "rgba(0,0,0,1)";
@@ -344,7 +323,7 @@ function onMaskMouseDown(e) {
     onMaskDraw(e);
 }
 
-// translated comment
+
 function onMaskDraw(e) {
     const state = getNodeState(GP.baseNode.id);
     const canvas = state.maskCanvas;
@@ -366,7 +345,7 @@ function onMaskDraw(e) {
 
     const mode = state.drawMode || "Paint";
 
-    // translated comment
+    
 
     if (mode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
@@ -390,7 +369,7 @@ function onMaskDraw(e) {
     state.drawLastY = y;
 }
 
-// translated comment
+
 function onMaskMouseUp(e) {
     const state = getNodeState(GP.baseNode.id);
     const canvas = state.maskCanvas;
@@ -402,7 +381,7 @@ function onMaskMouseUp(e) {
     if (state.isDrawing) {
         const ctx = canvas.getContext("2d");
         ctx.closePath();
-        // translated comment
+        
         ctx.globalCompositeOperation = "source-over";
     }
     state.isDrawing = false;
@@ -410,7 +389,7 @@ function onMaskMouseUp(e) {
 }
 
 function onMaskContextMenu(e) {
-    // translated comment
+    
     e.preventDefault();
 }
 
@@ -436,7 +415,7 @@ function adjustMaskOpacityByStep(direction) {
     let alpha = state.maskOpacity;
     if (alpha == null || isNaN(alpha)) alpha = 1;
 
-    const step = 0.05; // translated comment
+    const step = 0.05; 
     alpha += direction * step;
     alpha = clampMaskOpacity(alpha);
 
@@ -446,12 +425,12 @@ function adjustMaskOpacityByStep(direction) {
     if (state.opacitySlider) {
         const v = Math.round(alpha * 100);
         state.opacitySlider.value = String(v);
-        // translated comment
+        
         state.opacitySlider.dispatchEvent(new Event("input", { bubbles: true }));
     }
 }
 
-// translated comment
+
 
 function clampBrushSize(size) {
     return Math.max(1, Math.min(size, 300));
@@ -472,13 +451,13 @@ function adjustBrushSizeByStep(direction) {
 
     state.brushSize = size;
 
-    // translated comment
+    
     if (state.brushSlider) {
         state.brushSlider.value = String(size);
         state.brushSlider.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
-    // translated comment
+    
     if (state.lastCursorClientX != null) {
         updateBrushCursor({
             clientX: state.lastCursorClientX,
@@ -510,7 +489,7 @@ function updateBrushCursor(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // translated comment
+    
     state.lastCursorClientX = e.clientX;
     state.lastCursorClientY = e.clientY;
 
@@ -579,7 +558,7 @@ function onPanMouseDown(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !state.centralPanel) return;
 
-    // translated comment
+    
     if (state.currentTool !== "Scroll") return;
     if (e.button !== 0) return;
 
@@ -622,38 +601,38 @@ function applyAutoMask(state, modeIndex) {
     const h = canvas.height;
     if (!w || !h) return;
 
-    // translated comment
+    
     ctx.clearRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
 
-    // translated comment
+    
     const RED = "rgba(255,0,0,1)";
     const GREEN = "rgba(0,255,0,1)";
     const BLUE = "rgba(0,0,255,1)";
 
     if (modeIndex === 0) {
-        // translated comment
+        
         const mid = w / 2;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, mid, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(mid, 0, w - mid, h);
     } else if (modeIndex === 1) {
-        // translated comment
+        
         const x1 = w / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, x1, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(x1, 0, w - x1, h);
     } else if (modeIndex === 2) {
-        // translated comment
+        
         const x2 = (w * 2) / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, x2, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(x2, 0, w - x2, h);
     } else if (modeIndex === 3) {
-        // translated comment
+        
         const step = w / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, step, h);
@@ -674,11 +653,11 @@ export function registerKeyHandlers(scopeElement) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !scopeElement) return;
 
-    // translated comment
+    
     window.addEventListener("keydown", onKeyDownStub);
     window.addEventListener("keyup", onKeyUpStub);
 
-    // translated comment
+    
     const panel = state.centralPanel;
     if (panel) {
         panel.onwheel = (e) => onWheelZoom(e);     // zoom
@@ -688,7 +667,7 @@ export function registerKeyHandlers(scopeElement) {
         panel.onmouseleave = onPanMouseUp;
     }
 
-    // translated comment
+    
     const mask = state.maskCanvas;
     if (mask) {
         mask.onmousedown = onMaskMouseDown;
@@ -699,7 +678,7 @@ export function registerKeyHandlers(scopeElement) {
         mask.oncontextmenu = onMaskContextMenu;
     }
 
-    // translated comment
+    
     const cont = state.canvasContainer;
     if (cont) {
         cont.onmousemove = onBrushCursorMove;
@@ -708,7 +687,7 @@ export function registerKeyHandlers(scopeElement) {
         cont.style.cursor = "none";
     }
 
-    // translated comment
+    
     const sliders = scopeElement.querySelectorAll('input[type="range"]');
 
     // Brush size
@@ -716,7 +695,7 @@ export function registerKeyHandlers(scopeElement) {
         const brushSlider = sliders[0];
         state.brushSlider = brushSlider;
 
-        // translated comment
+        
         if (state.brushSize == null) {
             state.brushSize = clampBrushSize(parseInt(brushSlider.value) || 50);
         } else {
@@ -767,7 +746,7 @@ export function registerKeyHandlers(scopeElement) {
         };
     }
 
-    // translated comment
+    
     if (state.helpIcon && state.helpPanel) {
         state.helpIcon.onclick = () => {
             state.helpPanel.style.display = "flex";
@@ -797,13 +776,13 @@ export function registerKeyHandlers(scopeElement) {
     if (scrollBtn) scrollBtn.onclick = onToolButtonClick;
     if (clearBtn) clearBtn.onclick = onToolButtonClick;
 
-    // translated comment
+    
     if (!state.currentTool) {
         state.currentTool = "Brush";
     }
     updateToolButtonsHighlight(state.currentTool);
 
-    // translated comment
+    
     if (state.colorButtons && Array.isArray(state.colorButtons)) {
         state.colorButtons.forEach((btn, idx) => {
             btn.onclick = () => {
@@ -886,7 +865,7 @@ export function unregisterKeyHandlers(scopeElement) {
     window.removeEventListener("keydown", onKeyDownStub);
     window.removeEventListener("keyup", onKeyUpStub);
 
-    // translated comment
-    // translated comment
+    
+    
 }
 

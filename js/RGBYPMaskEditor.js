@@ -1,11 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { openMaskEditor } from "./RGBYPMaskEditor_ui.js";
 
-// export const GP = {
-//     baseNode: null,
-//     baseImg: null,
-//     maskImg: null,
-// };
 export const GP = {
     nodes: new Map(),
     baseNode: null,
