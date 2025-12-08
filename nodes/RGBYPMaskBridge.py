@@ -483,8 +483,51 @@ class RGBYPMaskBridge:
             )
 
         # Preview
+        # Preview
+        # Safety: if preview points to a non-existing file, fall back to the current input image
         ui = None
         if preview_filename is not None and preview_type is not None:
+            try:
+                if preview_type == "input":
+                    base_dir = folder_paths.get_input_directory()
+                else:  # "temp" or anything else → treat as temp
+                    base_dir = folder_paths.get_temp_directory()
+
+                if preview_subfolder:
+                    preview_full_path = os.path.join(base_dir, preview_subfolder, preview_filename)
+                else:
+                    preview_full_path = os.path.join(base_dir, preview_filename)
+
+                if not os.path.isfile(preview_full_path):
+                    print(
+                        f"[RGBYPMaskBridge] WARNING: preview file not found "
+                        f"('{preview_full_path}') → fallback to current input image"
+                    )
+                    # Save current image as a fresh original preview in temp
+                    fallback_name = f"{imageOriginalName}_rgbyp_original.png"
+                    fallback_path = os.path.join(folder_paths.get_temp_directory(), fallback_name)
+                    self._save_tensor_as_png(outputImage, fallback_path)
+
+                    preview_filename = fallback_name
+                    preview_type = "temp"
+                    preview_subfolder = ""
+                else:
+                    print(
+                        f"[RGBYPMaskBridge] preview file exists: '{preview_full_path}'"
+                    )
+            except Exception as e:
+                print(
+                    f"[RGBYPMaskBridge] ERROR while verifying preview file, "
+                    f"fallback to current input image: {e}"
+                )
+                fallback_name = f"{imageOriginalName}_rgbyp_original.png"
+                fallback_path = os.path.join(folder_paths.get_temp_directory(), fallback_name)
+                self._save_tensor_as_png(outputImage, fallback_path)
+
+                preview_filename = fallback_name
+                preview_type = "temp"
+                preview_subfolder = ""
+
             ui = {
                 "images": [
                     {
@@ -495,7 +538,8 @@ class RGBYPMaskBridge:
                 ]
             }
             print(
-                f"[RGBYPMaskBridge] preview: type={preview_type}, subfolder='{preview_subfolder}', filename='{preview_filename}'"
+                f"[RGBYPMaskBridge] preview: type={preview_type}, "
+                f"subfolder='{preview_subfolder}', filename='{preview_filename}'"
             )
         else:
             print("[RGBYPMaskBridge] no preview image resolved")
