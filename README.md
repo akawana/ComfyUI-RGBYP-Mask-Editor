@@ -26,6 +26,7 @@ The node saves its working files inside `/ComfyUI/temp/ and some in /ComfyUI/inp
 ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI.
 ⚠️ All files inside `/input/rgbyp/` can be deleted.
 
+
 The editor works on any image node (Load Image, Preview, etc.), but the package also includes special nodes that directly output RGBYP masks as separate images:
 
 - **RGBYPLoadImage**
