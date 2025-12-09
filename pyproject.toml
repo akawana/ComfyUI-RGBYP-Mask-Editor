@@ -1,5 +1,5 @@
 [project]
-name = "rgbyp-mask-editor"
+name = "ComfyUI-RGBYP-Mask-Editor"
 description = "A JS editor for five-color masks (RGB + Yellow + Pink) that works with any nodes, with three helper nodes — RGBYPLoadImage, RGBYPMaskBridge, and RGBYPMaskToRegularMasks—for convenient RGBYP mask handling."
 version = "1.0.0"
 license = {file = "LICENSE"} 
@@ -28,7 +28,7 @@ Documentation = "https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor/wiki"
 "Bug Tracker" = "https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor/issues"
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "akawana"
 DisplayName = "ComfyUI-RGBYP-Mask-Editor"
 Icon = ""
 includes = [] 
