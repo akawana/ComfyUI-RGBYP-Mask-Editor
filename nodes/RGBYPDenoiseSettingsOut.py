@@ -19,7 +19,7 @@ class RGBYPDenoiseSettingsOut:
         "pink_denoise",
     )
     FUNCTION = "extract"
-    CATEGORY = "RGBYP"
+    CATEGORY = "utils/settings"
 
     def extract(self, settings: list[float]):
         vals = list(settings) + [0.0, 0.0, 0.0, 0.0, 0.0]
