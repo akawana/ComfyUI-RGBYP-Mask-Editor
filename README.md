@@ -1,6 +1,6 @@
 ## Other My Nodes
 
-Utilities for working with Lists and toggling groups
+Utilities for working with Lists. Enabling disabling groups etc...
 
 https://github.com/akawana/ComfyUI-Utils-extra
 
@@ -15,20 +15,21 @@ https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor
 ---
 
 # ComfyUI-RGBYP-Mask-Editor
-RGB + Yellow + Pink 5-color mask editor for ComfyUI
+RGB + Yellow + Pink 5-color mask editor for ComfyUI. Also includes a set of nodes for working with 5-color masks that assist with regional prompting.
 
 ## Overview
 **RGBYP Mask Editor** is a custom JavaScript node that adds a full-featured color mask editor with 5 channels (RGB + Yellow + Pink).
 
 The node saves its working files inside `/ComfyUI/temp/ and some in /ComfyUI/input/rgbyp/`, which allows masks to persist even after refreshing the browser page.  
+
+[!IMPORTANT]
 ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI.
 ⚠️ All files inside `/input/rgbyp/` can be deleted.
 
 The editor works on any image node (Load Image, Preview, etc.), but the package also includes special nodes that directly output RGBYP masks as separate images:
 
-- **LoadImageWithFileData**
+- **RGBYPLoadImage**
 - **RGBYPMaskBridge**
-- **RGBYPMaskToRegularMasks**
 
 ---
 
