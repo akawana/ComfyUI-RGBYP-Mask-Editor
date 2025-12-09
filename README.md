@@ -40,7 +40,9 @@ The menu entry appears near the top.
 <img src="preview_menu.jpg" />
 
 ### Keyboard Shortcuts
+
 <details>
+
 - **1, 2, 3, 4, 5** — switch color. Also works with SHIFT+number
 - **SHIFT + A / D** — brush size  
 - **SHIFT + W / S** — mask opacity  
@@ -51,6 +53,7 @@ The menu entry appears near the top.
 - **SHIFT+SPACE (hold)** — pan the image. Also without SHIFT.
 - **ENTER** — save mask & close  
 - **ESC** — cancel & close
+
 </details>
 ### Mouse Controls
 - **Left click** — brush  
