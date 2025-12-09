@@ -23,8 +23,7 @@ RGB + Yellow + Pink 5-color mask editor for ComfyUI. Also includes a set of node
 The node saves its working files inside `/ComfyUI/temp/ and some in /ComfyUI/input/rgbyp/`, which allows masks to persist even after refreshing the browser page.  
 
 > [!IMPORTANT]
-> ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI.
-> ⚠️ All files inside `/input/rgbyp/` can be deleted.
+> ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI. All files inside `/input/rgbyp/` can be deleted.
 
 
 The editor works on any image node (Load Image, Preview, etc.), but the package also includes special nodes that directly output RGBYP masks as separate images:
@@ -41,6 +40,7 @@ The menu entry appears near the top.
 <img src="preview_menu.jpg" />
 
 ### Keyboard Shortcuts
+<details>
 - **1, 2, 3, 4, 5** — switch color. Also works with SHIFT+number
 - **SHIFT + A / D** — brush size  
 - **SHIFT + W / S** — mask opacity  
@@ -51,7 +51,7 @@ The menu entry appears near the top.
 - **SHIFT+SPACE (hold)** — pan the image. Also without SHIFT.
 - **ENTER** — save mask & close  
 - **ESC** — cancel & close
-
+</details>
 ### Mouse Controls
 - **Left click** — brush  
 - **Right click** — eraser  
