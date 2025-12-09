@@ -55,6 +55,7 @@ The menu entry appears near the top.
 - **ESC** — cancel & close
 
 </details>
+
 ### Mouse Controls
 - **Left click** — brush  
 - **Right click** — eraser  
@@ -62,9 +63,9 @@ The menu entry appears near the top.
 - **Mouse wheel** — zoom
 
 ### Opacity Note
-Changing opacity only affects the **preview**, including previews in nodes.  
-It **does not** affect the final mask file.  
-Default opacity is **75%**.
+
+> [!IMPORTANT]
+> Changing opacity only affects the **preview**, including previews in nodes. It **does not** affect the final mask file. Default opacity is **75%**.
 
 ### Auto-Mask Tools (4 buttons)
 Fill the mask horizontally:
@@ -101,6 +102,7 @@ This node includes a parameter: **`clear_on_size_change`**
 
 #### Important: `updater` widget
 
+> [!WARNING]
 > ⚠️ **Do not touch the `updater` widget.**
 
 - It is used **only for internal editor logic**.  
@@ -111,8 +113,25 @@ This node includes a parameter: **`clear_on_size_change`**
 ---
 
 ## RGBYPMaskToRegularMasks
+
 Converts a single RGBYP mask image into **five separate grayscale masks**.  
 A minimalistic utility for quick splitting.
+
+---
+
+## RGBYPMaskStrength + RGBYPMaskStrengthOut
+
+Two nodes that work together as a pair.
+The first node allows you to set the mask strength for each of the five colors, and the second node simply expands these settings wherever you need them.
+
+---
+
+## RGBYPMaskCompositeWithStrength
+
+Together with the parameters from **RGBYPMaskStrength**, this node generates a single grayscale mask where each of the five colors is represented as a gray shade corresponding to the strength you assigned.
+
+This node is useful for **Differential Diffusion** and many other features in ComfyUI that require masks.
+With it, you can now easily create masks with different grayscale values.
 
 ---
 
