@@ -18,12 +18,16 @@ from .nodes.RGBYPMaskStrength import NODE_DISPLAY_NAME_MAPPINGS as MS_DISPLAY
 from .nodes.RGBYPMaskStrengthOut import NODE_CLASS_MAPPINGS as MSOUT_MAPPINGS
 from .nodes.RGBYPMaskStrengthOut import NODE_DISPLAY_NAME_MAPPINGS as MSOUT_DISPLAY
 
+from .nodes.RGBYPMaskCompositeWithStrength import NODE_CLASS_MAPPINGS as COMP_MAPPINGS
+from .nodes.RGBYPMaskCompositeWithStrength import NODE_DISPLAY_NAME_MAPPINGS as COMP_DISPLAY
+
 NODE_CLASS_MAPPINGS = {
     **RGBYP_BR_MAPPINGS,
     **LI_MAPPINGS,
     **TOM_MAPPINGS,
     **MS_MAPPINGS,
     **MSOUT_MAPPINGS,
+    **COMP_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -32,6 +36,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **TOM_DISPLAY,
     **MS_DISPLAY,
     **MSOUT_DISPLAY,
+    **COMP_DISPLAY,
 }
 
 __all__ = [
