@@ -1,13 +1,16 @@
+from comfy.comfy_types.node_typing import IO, InputTypeDict
+
+
 class RGBYPDenoiseSettingsOut:
     @classmethod
-    def INPUT_TYPES(cls):
+    def INPUT_TYPES(cls) -> InputTypeDict:
         return {
             "required": {
-                "settings": ("LIST", {}),
+                "settings": (IO.LIST, {}),
             }
         }
 
-    RETURN_TYPES = ("FLOAT", "FLOAT", "FLOAT", "FLOAT", "FLOAT")
+    RETURN_TYPES = (IO.FLOAT, IO.FLOAT, IO.FLOAT, IO.FLOAT, IO.FLOAT)
     RETURN_NAMES = (
         "red_denoise",
         "green_denoise",
@@ -16,11 +19,10 @@ class RGBYPDenoiseSettingsOut:
         "pink_denoise",
     )
     FUNCTION = "extract"
-    CATEGORY = "utils/settings"
+    CATEGORY = "RGBYP"
 
-    def extract(self, settings):
-        # Ensure length of list
-        vals = list(settings) + [0, 0, 0, 0, 0]
+    def extract(self, settings: list[float]):
+        vals = list(settings) + [0.0, 0.0, 0.0, 0.0, 0.0]
         return (
             float(vals[0]),
             float(vals[1]),
