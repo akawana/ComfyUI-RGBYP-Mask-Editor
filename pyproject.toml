@@ -1,6 +1,6 @@
 [project]
 name = "ComfyUI-RGBYP-Mask-Editor"
-publisher = "akawana"
+publisher = "akawana2"
 version = "2.00"
 frontend_version = "2.00"
 description = "RGB + Yellow + Pink 5-color mask editor for ComfyUI. Also includes a set of nodes for working with 5-color masks that assist with regional prompting."
@@ -16,12 +16,12 @@ Documentation = "https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor"
 
 [tool.comfy_node]
 package = "nodes"
-publisher = "akawana"
+publisher = "akawana2"
 display_name = "ComfyUI-RGBYP-Mask-Editor"
 summary = "RGB + Yellow + Pink 5-color mask editor for ComfyUI. "
 tags = ["mask", "rgb", "regional prompting", "rgbyp"]
 
 [tool.comfy]
-PublisherId = "akawana" # TODO (fill in Publisher ID from Comfy Registry Website).
+PublisherId = "akawana2" # TODO (fill in Publisher ID from Comfy Registry Website).
 DisplayName = "ComfyUI-RGBYP-Mask-Editor" # Display name for the Custom Node. Can be changed later.
 Icon = "https://example.com/icon.png"
