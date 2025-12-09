@@ -22,8 +22,8 @@ class RGBYPMaskStrength:
     FUNCTION = "build"
     CATEGORY = "mask"
 
-    def build(self, red_denoise, green_denoise, blue_denoise, yellow_denoise, pink_denoise):
-        return ([red_denoise, green_denoise, blue_denoise, yellow_denoise, pink_denoise],)
+    def build(self, red_strength, green_strength, blue_strength, yellow_strength, pink_strength):
+        return ([red_strength, green_strength, blue_strength, yellow_strength, pink_strength],)
 
 
 NODE_CLASS_MAPPINGS = {
