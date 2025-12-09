@@ -5,6 +5,8 @@ import numpy as np
 from PIL import Image
 import folder_paths
 
+print = lambda *a, **k: None
+
 
 class RGBYPMaskBridge:
     @classmethod
