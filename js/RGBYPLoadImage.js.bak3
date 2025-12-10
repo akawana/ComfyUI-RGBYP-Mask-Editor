@@ -1,0 +1,278 @@
+import { api } from "../../scripts/api.js";
+import { app } from "../../../scripts/app.js";
+
+// RGBYPLoadImage.js
+// Adds a "Load Mask" button to RGBYPLoadImage node and handles mask upload, resize, composite, and temp/json saving.
+
+(function () {
+    // Utility: load HTMLImageElement from a File
+    function loadImageFromFile(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = (e) => reject(e);
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    // Utility: load HTMLImageElement from URL
+    function loadImageFromUrl(url) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve(img);
+            img.onerror = (e) => reject(e);
+            img.src = url;
+        });
+    }
+
+    // Utility: resize an image into a canvas
+    function resizeToCanvas(img, width, height) {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        return canvas;
+    }
+
+    // Utility: bake mask onto original using opacity
+    function bakeComposite(originalCanvas, maskCanvas, opacity) {
+        const canvas = document.createElement("canvas");
+        canvas.width = originalCanvas.width;
+        canvas.height = originalCanvas.height;
+        const ctx = canvas.getContext("2d");
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(originalCanvas, 0, 0);
+
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(maskCanvas, 0, 0);
+        ctx.globalAlpha = 1.0;
+
+        return canvas;
+    }
+
+    // Upload image blob to temp using ComfyUI API
+    async function uploadImageToTemp(filename, blob) {
+        const formData = new FormData();
+        formData.append("image", blob, filename);
+        formData.append("type", "temp");
+        formData.append("subfolder", "");
+        formData.append("overwrite", "true");
+
+        await api.fetchApi("/upload/image", {
+            method: "POST",
+            body: formData,
+        });
+    }
+    // Upload text (JSON) to temp using ComfyUI API
+    async function uploadJsonToTemp(filename, obj) {
+        const blob = new Blob([JSON.stringify(obj)], { type: "application/json" });
+        await uploadImageToTemp(filename, blob);
+    }
+
+    async function updateUpdater(node) {
+        const updaterWidget = node.widgets.find(
+            (w) =>
+                w &&
+                (w.name === "updater" || w.label === "updater") &&
+                (w.type === "FLOAT" || w.widgetType === "FLOAT" || typeof w.value === "number")
+        );
+            if (updaterWidget) {
+                const oldVal =
+                    typeof updaterWidget.value === "number"
+                        ? updaterWidget.value
+                        : parseFloat(updaterWidget.value) || 0;
+
+                let rnd = 0;
+                let newVal = oldVal;
+                let attempts = 0;
+
+                // keep generating random values while the new value equals the old one
+                // (just in case, limit to 100 attempts)
+                while (newVal === oldVal && attempts < 100) {
+                    rnd = (Math.random() * 0.02) - 0.01; // from -0.001 to +0.001
+                    attempts++;
+                }
+
+                updaterWidget.value = newVal;
+                try {
+                    if (typeof updaterWidget.callback === "function") {
+                        updaterWidget.callback(updaterWidget.value, app, node, updaterWidget);
+                    }
+                } catch (e) {
+                    console.warn("[updatePreview] updater widget callback error:", e);
+                }
+
+                if (app && app.graph) {
+                    app.graph.setDirtyCanvas(true, true);
+                }
+            }
+
+    }
+
+    function addLoadMaskButton(node) {
+        if (!node || node.__rgbyp_loadmask_added) return;
+        node.__rgbyp_loadmask_added = true;
+
+        // Find widgets: image and updater
+        const imageWidget = node.widgets?.find((w) => w.name === "image");
+        const updaterWidget = node.widgets?.find((w) => w.name === "updater");
+
+        // Create hidden file input
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = ".png,.jpg,.jpeg";
+        fileInput.style.display = "none";
+        document.body.appendChild(fileInput);
+
+        // Create button widget
+        const btnWidget = node.addWidget("button", "Load Mask", null, () => {
+            fileInput.value = "";
+            fileInput.click();
+        });
+
+        // Force the button to be the first widget visually
+        if (node.widgets && node.widgets.length > 1) {
+            const idx = node.widgets.indexOf(btnWidget);
+            if (idx > 0) {
+                node.widgets.splice(idx, 1);
+                node.widgets.unshift(btnWidget);
+            }
+        }
+
+        fileInput.addEventListener("change", async (ev) => {
+            const file = ev.target.files?.[0];
+            if (!file) return;
+
+            // Check that main image is loaded
+            const imageName = imageWidget?.value;
+            if (!imageName) {
+                console.warn("[RGBYPLoadImage] No main image loaded, aborting mask processing.");
+                return;
+            }
+
+            // Determine unique node id from properties
+            const uniqueId = node.properties?.unique_id || node.properties?.["_unique_id"] || node.id;
+            if (!uniqueId && uniqueId !== 0) {
+                console.warn("[RGBYPLoadImage] No unique_id found, aborting mask processing.");
+                return;
+            }
+
+            // Build filenames (strip extension from imageName)
+            const dotIndex = imageName.lastIndexOf(".");
+            const nameNoExt = dotIndex > 0 ? imageName.slice(0, dotIndex) : imageName;
+            const baseName = `${nameNoExt}_${uniqueId}`;
+            const jsonFileName = `${baseName}.json`;
+            const originalFileName = `${baseName}_original.png`;
+            const maskFileName = `${baseName}_mask.png`;
+            const compositeFileName = `${baseName}_composite.png`;
+
+            // updateUpdater(node);
+
+            try {
+                // Load original image from input folder
+                const origUrl = api.apiURL(
+                    `/view?filename=${encodeURIComponent(imageName)}&type=input&subfolder=`
+                );
+                const origImg = await loadImageFromUrl(origUrl);
+
+                const originalWidth = origImg.width;
+                const originalHeight = origImg.height;
+
+                // Resize original to canvas and also upload a copy to temp as originalFileName
+                const originalCanvas = resizeToCanvas(origImg, originalWidth, originalHeight);
+                await new Promise((resolve, reject) => {
+                    originalCanvas.toBlob(async (blob) => {
+                        if (!blob) return reject(new Error("Failed to create original blob"));
+                        await uploadImageToTemp(originalFileName, blob);
+                        resolve();
+                    }, "image/png");
+                });
+
+                // Load selected mask file as image and resize to match original
+                const maskImg = await loadImageFromFile(file);
+                const maskCanvas = resizeToCanvas(maskImg, originalWidth, originalHeight);
+
+                // Upload resized mask to temp
+                await new Promise((resolve, reject) => {
+                    maskCanvas.toBlob(async (blob) => {
+                        if (!blob) return reject(new Error("Failed to create mask blob"));
+                        await uploadImageToTemp(maskFileName, blob);
+                        resolve();
+                    }, "image/png");
+                });
+
+                // Get opacity from updater widget (FLOAT)
+                let opacity = 1.0;
+                if (updaterWidget && typeof updaterWidget.value === "number") {
+                    opacity = updaterWidget.value;
+                }
+
+                // Create baked composite
+                const compositeCanvas = bakeComposite(originalCanvas, maskCanvas, opacity);
+
+                // Upload composite to temp
+                await new Promise((resolve, reject) => {
+                    compositeCanvas.toBlob(async (blob) => {
+                        if (!blob) return reject(new Error("Failed to create composite blob"));
+                        await uploadImageToTemp(compositeFileName, blob);
+                        resolve();
+                    }, "image/png");
+                });
+
+                // Build and upload json meta
+                const meta = {
+                    original: originalFileName,
+                    mask: maskFileName,
+                    composite: compositeFileName,
+                    width: originalWidth,
+                    height: originalHeight,
+                };
+                await uploadJsonToTemp(jsonFileName, meta);
+
+                // Update node preview to show composite from temp
+                if (node.imgs && node.imgs.length > 0 && node.imgs[0]) {
+                    const imgHolder = node.imgs[0];
+                    const imgEl = imgHolder.img || imgHolder;
+                    const viewUrl = api.apiURL(
+                        `/view?filename=${encodeURIComponent(compositeFileName)}&type=temp&subfolder=`
+                    );
+                    imgEl.src = viewUrl;
+                    imgEl.dataset["src"] = viewUrl;
+                }
+
+                if (node.graph && node.graph.setDirtyCanvas) {
+                    node.graph.setDirtyCanvas(true, true);
+                }
+
+                console.log("[RGBYPLoadImage] Mask processed and files saved:", {
+                    jsonFileName,
+                    originalFileName,
+                    maskFileName,
+                    compositeFileName,
+                });
+            } catch (err) {
+                console.error("[RGBYPLoadImage] Error while processing mask:", err);
+            }
+        });
+    }
+
+    // Register extension with ComfyUI
+    app.registerExtension({
+        name: "RGBYPLoadImage.LoadMaskExtension",
+        beforeRegisterNodeDef(nodeType, nodeData, appRef) {
+            if (nodeData?.name === "RGBYPLoadImage") {
+                const oldOnNodeCreated = nodeType.prototype.onNodeCreated;
+                nodeType.prototype.onNodeCreated = function () {
+                    if (oldOnNodeCreated) {
+                        oldOnNodeCreated.apply(this, arguments);
+                    }
+                    addLoadMaskButton(this);
+                };
+            }
+        },
+    });
+})();

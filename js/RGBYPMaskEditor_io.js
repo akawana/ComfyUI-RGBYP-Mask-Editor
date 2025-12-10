@@ -40,7 +40,11 @@ export function initBaseImageAndCanvas() {
     }
 
     (async () => {
-        const metaFilename = `rgbyp_${node.id}.json`;
+        const currentFilename = getNodeImageFilename(node) || "";
+        const dot = currentFilename.lastIndexOf(".");
+        const baseName = dot >= 0 ? currentFilename.slice(0, dot) : currentFilename;
+
+        const metaFilename = `${baseName}_${node.id}.json`;
         let meta = null;
 
         // --- 1. Try to read meta json from temp ---
@@ -70,19 +74,19 @@ export function initBaseImageAndCanvas() {
 
             // cut postfixes
             const normalizedCurrent = currentFilename
-                ? currentFilename.replace(/_rgbyp_composite.*?(?=\.)/, "")
+                ? currentFilename.replace(/_\d+_(?:composite|original|mask).*?(?=\.)/, "")
                 : "";
             const normalizedOriginal = originalFilename
-                ? originalFilename.replace(/_rgbyp_original.*?(?=\.)/, "")
+                ? originalFilename.replace(/_\d+_(?:composite|original|mask).*?(?=\.)/, "")
                 : "";
 
             if (!normalizedCurrent || !normalizedOriginal || normalizedCurrent !== normalizedOriginal) {
 
-/*                 console.log(
-                    "[RGBYP] initBaseImageAndCanvas: meta.original does not match current node image -> ignore meta",
-                    { normalizedCurrent, normalizedOriginal }
-                );
- */                
+                /*                 console.log(
+                                    "[RGBYP] initBaseImageAndCanvas: meta.original does not match current node image -> ignore meta",
+                                    { normalizedCurrent, normalizedOriginal }
+                                );
+                 */
                 meta = null;
             }
         } else {
@@ -211,7 +215,7 @@ function getNodeImageFilename(node) {
         const url = new URL(src, window.location.origin);
         const fromParam = url.searchParams.get("filename");
 
-        if (fromParam) return fromParam.replace(/_rgbyp_composite.*?(?=\.)/, "").replace(/_rgbyp_original.*?(?=\.)/, "");
+        if (fromParam) return fromParam.replace(/_\d+_(?:composite|original|mask).*?(?=\.)/, "");
 
         const pathParts = url.pathname.split("/");
         return pathParts[pathParts.length - 1] || null;
@@ -297,12 +301,12 @@ export async function saveMask() {
     const ext = ".png";
 
     // Default file names (for the new case)
-    const desiredOriginalName = `${baseName}_rgbyp_original${ext}`;
-    const desiredMaskName = `${baseName}_rgbyp_mask${ext}`;
-    const desiredCompositeName = `${baseName}_rgbyp_composite${ext}`;
+    const desiredOriginalName = `${baseName}_${node.id}_original${ext}`;
+    const desiredMaskName = `${baseName}_${node.id}_mask${ext}`;
+    const desiredCompositeName = `${baseName}_${node.id}_composite${ext}`;
 
     // JSON name by node id
-    const metaFilename = `rgbyp_${node.id}.json`;
+    const metaFilename = `${baseName}_${node.id}.json`;
 
     // console.log("[****] saveMask: determined filenames:", { metaFilename, desiredOriginalName, desiredMaskName, desiredCompositeName });
 
@@ -383,7 +387,7 @@ export async function saveMask() {
     const compositeDataUrl = compCanvas.toDataURL("image/png");
     const compositeFile = dataURLtoFile(compositeDataUrl, compositeName);
     await uploadComfyFile(compositeFile, "temp");
-    await uploadComfyFile(compositeFile, "input", "rgbyp");
+    // await uploadComfyFile(compositeFile, "input", "rgbyp");
     // console.log("[RGBYP] saveMask: composite saved", compositeName, "opacity =", state.maskOpacity);
 
     // ---------- 7. Save / update meta JSON ----------
@@ -441,7 +445,7 @@ export function dataURLtoFile(dataUrl, filename) {
 /**
  * Makes a baked image (original + mask with respect to maskOpacity)
  * and prepares a file with the correct name:
- *   <original>_rgbyp_composite.png
+ *   <original>_<nodeId>_composite.png
  * or, if there is already a postfix, keeps it as is.
  *
  * Also, it is logical to update the preview in the python node here.
@@ -520,11 +524,11 @@ export async function updatePreview() {
                 );
 
                 if (imageWidget) {
-/*                     console.log(
-                        "[updatePreview] updatePreview: updating image widget to",
-                        annotatedPath
-                    );
- */                    
+                    /*                     console.log(
+                                            "[updatePreview] updatePreview: updating image widget to",
+                                            annotatedPath
+                                        );
+                     */
                     imageWidget.value = annotatedPath;
 
                     // If the widget has a callback — give it a chance to react
@@ -545,11 +549,11 @@ export async function updatePreview() {
                         app.graph.setDirtyCanvas(true, true);
                     }
                 } else {
-/*                     console.log(
-                        "[updatePreview] updatePreview: no image widget found on foreign node",
-                        nodeType
-                    );
- */                    
+                    /*                     console.log(
+                                            "[updatePreview] updatePreview: no image widget found on foreign node",
+                                            nodeType
+                                        );
+                     */
                 }
             }
         }
@@ -586,10 +590,10 @@ export async function updatePreview() {
 
                 updaterWidget.value = newVal;
 
-/*                 console.log(
-                    `[updatePreview] updater widget set to ${newVal.toFixed(6)} (old=${oldVal.toFixed(6)}, opacity=${state.maskOpacity}, rnd=${rnd.toFixed(6)}, attempts=${attempts})`
-                );
- */
+                /*                 console.log(
+                                    `[updatePreview] updater widget set to ${newVal.toFixed(6)} (old=${oldVal.toFixed(6)}, opacity=${state.maskOpacity}, rnd=${rnd.toFixed(6)}, attempts=${attempts})`
+                                );
+                 */
                 try {
                     if (typeof updaterWidget.callback === "function") {
                         updaterWidget.callback(updaterWidget.value, app, node, updaterWidget);

@@ -645,10 +645,6 @@ function applyAutoMask(state, modeIndex) {
 
 
 
-/**
- * Регистрация обработчиков.
- * scopeElement — это dialog, который создаётся в _ui.
- */
 export function registerKeyHandlers(scopeElement) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !scopeElement) return;
@@ -858,9 +854,6 @@ export function registerKeyHandlers(scopeElement) {
 
 }
 
-/**
- * Снятие обработчиков при закрытии редактора.
- */
 export function unregisterKeyHandlers(scopeElement) {
     window.removeEventListener("keydown", onKeyDownStub);
     window.removeEventListener("keyup", onKeyUpStub);

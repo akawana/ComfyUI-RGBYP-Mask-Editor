@@ -7,6 +7,7 @@ from PIL import Image
 import nodes
 import folder_paths
 
+print = lambda *a, **k: None  # Disable print statements for cleaner output
 
 class RGBYPLoadImage:
     """
@@ -272,11 +273,11 @@ class RGBYPLoadImage:
             f"updater={updater}, unique_id='{unique_id}'"
         )
 
-        # 1. Load the image стандартной LoadImage
+        # 1. Load the image LoadImage
         base_loader = nodes.LoadImage()
         base_image, base_mask = base_loader.load_image(image)
 
-        # 1. Take the input image name и сохраняем имя картинки в переменной imageOriginalName
+        # 1. Take the input image name 
         abs_path = folder_paths.get_annotated_filepath(image)
         dir_path, file_name_ext = os.path.split(abs_path)
         imageOriginalName, _ = os.path.splitext(file_name_ext)
@@ -290,12 +291,18 @@ class RGBYPLoadImage:
         # 1.1 Create variable outputMask = None
         outputMask = None
 
-        # 1.2 Build json file name как rgbyp_idНоды и записываем в переменную jsonFileName
+        # 1.2 Build json file name as rgbyp_idNode
         temp_dir = folder_paths.get_temp_directory()
         os.makedirs(temp_dir, exist_ok=True)
 
         if unique_id is not None:
-            jsonFileName = f"rgbyp_{unique_id}.json"
+            # remove extension from imageOriginalName
+            base_name = imageOriginalName
+            dot = base_name.rfind(".")
+            if dot > 0:
+                base_name = base_name[:dot]
+
+            jsonFileName = f"{base_name}_{unique_id}.json"
             json_path = os.path.join(temp_dir, jsonFileName)
         else:
             jsonFileName = None
@@ -312,7 +319,7 @@ class RGBYPLoadImage:
         # 1.4 Save the image filename without extension into the variable fileName
         fileName = imageOriginalName
 
-        # 2. Check if exists в папке temp json с именем jsonFileName
+        # 2. Check if exists in temp json jsonFileName
         if json_path is not None and os.path.isfile(json_path):
             print(f"[RGBYPLoadImage] load_image: json exists at '{json_path}'")
             try:
@@ -330,9 +337,8 @@ class RGBYPLoadImage:
                 f"json mask field='{mask_rel}'"
             )
 
-            # IF FIELD mask НЕ ПУСТОЕ
+            # IF FIELD mask is not empty
             if mask_rel:
-                # mask_rel может быть абсолютным путём или именем файла в temp
                 mask_path = (
                     mask_rel if os.path.isabs(mask_rel) else os.path.join(temp_dir, mask_rel)
                 )
@@ -357,7 +363,7 @@ class RGBYPLoadImage:
                         "will fallback to black 64x64"
                     )
             else:
-                # IF FIELD ПУСТОЕ
+                # IF FIELD not empty
                 print(
                     "[RGBYPLoadImage] load_image: json mask field is empty, "
                     "will use black 64x64 mask"

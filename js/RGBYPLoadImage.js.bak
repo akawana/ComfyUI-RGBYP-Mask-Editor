@@ -1,0 +1,186 @@
+// RGBYPLoadImage.js
+
+(function () {
+    // Utility: load image from file as HTMLImageElement
+    function loadImageFromFile(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    // Utility: resize canvas
+    function resizeImageCanvas(img, w, h) {
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        return c;
+    }
+
+    // Utility: load base64 original preview (provided by Python node)
+    async function loadOriginalImage(path, w, h) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        return new Promise((resolve, reject) => {
+            img.onload = () => resolve(resizeImageCanvas(img, w, h));
+            img.onerror = reject;
+            img.src = path;
+        });
+    }
+
+    // Utility: bake mask onto original with given opacity
+    function bakeComposite(origCanvas, maskCanvas, opacity) {
+        const c = document.createElement("canvas");
+        c.width = origCanvas.width;
+        c.height = origCanvas.height;
+        const ctx = c.getContext("2d");
+
+        ctx.drawImage(origCanvas, 0, 0);
+
+        ctx.globalAlpha = opacity;
+        ctx.drawImage(maskCanvas, 0, 0);
+
+        return c;
+    }
+
+    // Utility: write a file into /temp using Comfy API
+    async function saveToTemp(filename, blob) {
+        const form = new FormData();
+        form.append("file", blob, filename);
+        await api.fetchApi("/upload/temp", {
+            method: "POST",
+            body: form
+        });
+    }
+
+    async function saveJsonToTemp(filename, obj) {
+        const blob = new Blob([JSON.stringify(obj)], { type: "application/json" });
+        await saveToTemp(filename, blob);
+    }
+
+    function addLoadMaskButton(node) {
+        if (!node || node.__loadmask_added) return;
+        node.__loadmask_added = true;
+
+        // Create widget button
+        const widget = node.addWidget(
+            "button",
+            "Load Mask",
+            null,
+            () => fileInput.click()
+        );
+
+        // Ensure button is first
+        node.widgets.splice(0, 0, node.widgets.pop());
+
+        // Hidden file input
+        const fileInput = document.createElement("input");
+        fileInput.type = "file";
+        fileInput.accept = ".png,.jpg,.jpeg";
+        fileInput.style.display = "none";
+
+        fileInput.onchange = async (ev) => {
+            const file = ev.target.files?.[0];
+            if (!file) return;
+
+            const n = node;
+            const data = n?.__proto__?.constructor?.nodeDataMap?.[n.id] || n;
+
+            const mainImageName = data?.properties?.file_name;
+            const fullPath = data?.properties?.file_path;
+
+            if (!mainImageName || !fullPath) {
+                console.warn("[RGBYPLoadImage] No main image loaded.");
+                return;
+            }
+
+            const uniqueId = data?.properties?.unique_id;
+            if (!uniqueId) {
+                console.warn("[RGBYPLoadImage] No unique_id found.");
+                return;
+            }
+
+            const base = `${mainImageName}_${uniqueId}`;
+            const jsonFileName = `${base}.json`;
+            const originalFileName = `${base}_orig.png`;
+            const maskFileName = `${base}_mask.png`;
+            const compositeFileName = `${base}_composite.png`;
+
+            const origUrl = `/view_temp/${originalFileName}`;
+            const opacity = data?.widgets_values?.[0] || 1.0;
+
+            let originalWidth = 0;
+            let originalHeight = 0;
+
+            try {
+                const origImg = new Image();
+                origImg.src = origUrl;
+
+                await new Promise((resolve, reject) => {
+                    origImg.onload = resolve;
+                    origImg.onerror = reject;
+                });
+
+                originalWidth = origImg.width;
+                originalHeight = origImg.height;
+            } catch (e) {
+                console.warn("[RGBYPLoadImage] Cannot determine original size.");
+                return;
+            }
+
+            let maskImg;
+            try {
+                maskImg = await loadImageFromFile(file);
+            } catch (e) {
+                console.error("[RGBYPLoadImage] Failed to load mask file.", e);
+                return;
+            }
+
+            const resizedMask = resizeImageCanvas(maskImg, originalWidth, originalHeight);
+
+            resizedMask.toBlob(async (blob) => {
+                await saveToTemp(maskFileName, blob);
+            });
+
+            const origCanvas = await loadOriginalImage(origUrl, originalWidth, originalHeight);
+            const bakedCanvas = bakeComposite(origCanvas, resizedMask, opacity);
+
+            bakedCanvas.toBlob(async (blob) => {
+                await saveToTemp(compositeFileName, blob);
+            });
+
+            const meta = {
+                original: originalFileName,
+                mask: maskFileName,
+                composite: compositeFileName,
+                width: originalWidth,
+                height: originalHeight
+            };
+
+            await saveJsonToTemp(jsonFileName, meta);
+
+            api.refreshNodePreview(n.id, `/view_temp/${compositeFileName}`);
+            n.graph.setDirtyCanvas(true, true);
+        };
+
+        const root = document.body;
+        root.appendChild(fileInput);
+    }
+
+    const original = LiteGraph.registerNodeType;
+    LiteGraph.registerNodeType = function (type, cls) {
+        original.call(this, type, cls);
+
+        if (type === "RGBYPLoadImage") {
+            const old = cls.prototype.onNodeCreated;
+            cls.prototype.onNodeCreated = function () {
+                if (old) old.apply(this, arguments);
+                addLoadMaskButton(this);
+            };
+        }
+    };
+})();

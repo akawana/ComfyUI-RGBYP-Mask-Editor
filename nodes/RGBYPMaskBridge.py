@@ -206,7 +206,7 @@ class RGBYPMaskBridge:
             base_filename = f"RGBYP_{unique_id}.png"
 
         base_no_ext, _ = os.path.splitext(base_filename)
-        suffix = "_rgbyp_composite"
+        suffix = "_composite"
         if base_no_ext.endswith(suffix):
             imageOriginalName = base_no_ext[: -len(suffix)]
         else:
@@ -218,12 +218,12 @@ class RGBYPMaskBridge:
         print(f"[RGBYPMaskBridge] input file='{base_filename}', imageOriginalName='{imageOriginalName}'")
 
         # 1.1 jsonFileName
-        jsonFileName = f"rgbyp_{unique_id}.json"
+        jsonFileName = f"RGBYP_{unique_id}.json"
         json_path = os.path.join(temp_dir, jsonFileName)
 
         # 1.2 jsonTemp in memory
         jsonTemp = {
-            "original": f"{imageOriginalName}_rgbyp_original.png",
+            "original": f"{imageOriginalName}_original.png",
             "mask": "",
             "composite": "",
             "width": int(w),
@@ -288,7 +288,7 @@ class RGBYPMaskBridge:
             print(f"[RGBYPMaskBridge] sizes_match={sizes_match}, clear_on_size_change={clear_on_size_change}")
 
             # composite name
-            composite_name = f"{imageOriginalName}_rgbyp_composite.png"
+            composite_name = f"{imageOriginalName}_composite.png"
             composite_temp_path = os.path.join(temp_dir, composite_name)
             composite_input_path = os.path.join(rgbyp_input_dir, composite_name)
 
@@ -435,8 +435,8 @@ class RGBYPMaskBridge:
                                 mask_path, (int(h), int(w)), device
                             )
                             if outputMask is not None:
-                                # save mask in temp as imageOriginalName + _rgbyp_mask
-                                mask_output_name = f"{imageOriginalName}_rgbyp_mask.png"
+                                # save mask in temp as imageOriginalName + _mask
+                                mask_output_name = f"{imageOriginalName}_mask.png"
                                 mask_output_path = os.path.join(temp_dir, mask_output_name)
                                 self._save_tensor_as_png(outputMask, mask_output_path)
                                 jsonData["mask"] = mask_output_name
@@ -506,7 +506,7 @@ class RGBYPMaskBridge:
                         f"('{preview_full_path}') → fallback to current input image"
                     )
                     # Save current image as a fresh original preview in temp
-                    fallback_name = f"{imageOriginalName}_rgbyp_original.png"
+                    fallback_name = f"{imageOriginalName}_original.png"
                     fallback_path = os.path.join(folder_paths.get_temp_directory(), fallback_name)
                     self._save_tensor_as_png(outputImage, fallback_path)
 
@@ -522,7 +522,7 @@ class RGBYPMaskBridge:
                     f"[RGBYPMaskBridge] ERROR while verifying preview file, "
                     f"fallback to current input image: {e}"
                 )
-                fallback_name = f"{imageOriginalName}_rgbyp_original.png"
+                fallback_name = f"{imageOriginalName}_original.png"
                 fallback_path = os.path.join(folder_paths.get_temp_directory(), fallback_name)
                 self._save_tensor_as_png(outputImage, fallback_path)
 

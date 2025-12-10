@@ -13,6 +13,16 @@ RGBYP 5-color mask editor
 https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor
 
 ---
+## Version changes
+**V 2.0**
+
+**New node: RGBYPSaveMask** - Simple mask image saver which can take file_path and file_name from RGBYPLoadImage and save mask in the same folder as original image. Just useful. You can save mask with any other node. It is just an image but remember to save with alpha.
+
+**RGBYPLoadImage** - now has Open Mask button. You can load mask image if you create it with some other editor.
+
++ All nodes work faster because I don't use /input/rgbyp/ folder anymore. I have changed the logic little bit.
+
+---
 
 # ComfyUI-RGBYP-Mask-Editor
 RGB + Yellow + Pink 5-color mask editor for ComfyUI. Also includes a set of nodes for working with 5-color masks that assist with regional prompting.
@@ -20,10 +30,10 @@ RGB + Yellow + Pink 5-color mask editor for ComfyUI. Also includes a set of node
 ## Overview
 **RGBYP Mask Editor** is a custom JavaScript node that adds a full-featured color mask editor with 5 channels (RGB + Yellow + Pink).
 
-The node saves its working files inside `/ComfyUI/temp/ and some in /ComfyUI/input/rgbyp/`, which allows masks to persist even after refreshing the browser page.  
+The node saves its working files inside /ComfyUI/temp/, which allows masks to persist even after refreshing the browser page.  
 
 > [!IMPORTANT]
-> ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI. All files inside `/input/rgbyp/` can be deleted.
+> ⚠️ All files inside `/temp/` are automatically cleared when you restart ComfyUI.
 
 
 The editor works on any image node (Load Image, Preview, etc.), but the package also includes special nodes that directly output RGBYP masks as separate images:
@@ -85,6 +95,8 @@ Additional outputs:
 - **file_path** — full path excluding filename  
 - **file_name** — filename without extension  
 
+Starting from version 2 you can load a mask which you create in some editor. The node now has Open Mask button. Don't forget you have to open the main image first.
+
 ---
 
 ## RGBYPMaskBridge
@@ -109,6 +121,11 @@ This node includes a parameter: **`clear_on_size_change`**
 - Do not change its value.  
 - Do not connect anything to it.  
 - Just ignore it in your graphs.
+
+---
+
+## RGBYPSaveMask
+It is a simple Image Saver which takes file_path and file_name. Useful and easy with RGBYPLoadImage which provides file data. FYI: You can use any image saving node to save mask.
 
 ---
 

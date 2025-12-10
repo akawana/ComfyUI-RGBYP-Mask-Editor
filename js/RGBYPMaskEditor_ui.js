@@ -417,13 +417,12 @@ export function openMaskEditor(node) {
     setNodeState(GP.baseNode.id, { helpPanel: helpPanel });
 
 
-    // нижняя панель с кнопкой Close
     const helpFooter = document.createElement("div");
     helpFooter.style.display = "flex";
     helpFooter.style.justifyContent = "flex-end";
     helpFooter.style.marginTop = "16px";
 
-    const helpCloseBtn = makeTextButton("Close", true); // такой же зелёный, как Save
+    const helpCloseBtn = makeTextButton("Close", true); 
     setNodeState(GP.baseNode.id, { helpCloseBtn: helpCloseBtn });
 
     helpFooter.appendChild(helpCloseBtn);
