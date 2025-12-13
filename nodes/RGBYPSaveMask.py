@@ -20,6 +20,9 @@ class RGBYPSaveMask:
                         "label_off": "Exact name",
                     },
                 ),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
             }
         }
 
@@ -49,7 +52,7 @@ class RGBYPSaveMask:
         except Exception as e:
             print(f"[RGBYPSaveMask] ERROR saving PNG '{path}': {e}")
 
-    def save(self, rgbyp_mask, file_path, file_name, add_postfix=True):
+    def save(self, rgbyp_mask, file_path, file_name, add_postfix=True, unique_id=None):
         if not isinstance(file_path, str) or not isinstance(file_name, str):
             return (rgbyp_mask,)
 
@@ -63,7 +66,7 @@ class RGBYPSaveMask:
             file_path = file_path + os.sep
 
         if add_postfix:
-            final_name = f"{file_name}_rgbyp_mask"
+            final_name = f"{file_name}_rgbyp_mask_{unique_id}"
         else:
             final_name = file_name
 

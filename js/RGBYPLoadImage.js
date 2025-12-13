@@ -182,7 +182,7 @@ let imageWidget = null;
         document.body.appendChild(fileInput);
 
         // Create button widgets
-        node.addWidget("null", "", null, null, { height: 4 });
+        node.addWidget("null", "", null, null, () => { });
 
 
         const btnWidget = node.addWidget("button", "Load Mask", null, () => {

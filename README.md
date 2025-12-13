@@ -14,7 +14,12 @@ https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor
 
 ---
 ## Version changes
-**V 2.0**
+
+**V 2.01**
+
+**RGBYPMaskBridge** - now has Open Mask button. You can load mask image if you create it with some other editor. Or saved on prev session with RGBYPSaveMask
+
+**V 2.00**
 
 **New node: RGBYPSaveMask** - Simple mask image saver which can take file_path and file_name from RGBYPLoadImage and save mask in the same folder as original image. Just useful. You can save mask with any other node. It is just an image but remember to save with alpha.
 
@@ -95,7 +100,7 @@ Additional outputs:
 - **file_path** — full path excluding filename  
 - **file_name** — filename without extension  
 
-Starting from version 2 you can load a mask which you create in some editor. The node now has Open Mask button. Don't forget you have to open the main image first.
+Starting from version 2 you can load a mask which you create in some editor. The node now has Load Mask button. Don't forget you have to open the main image first.
 
 ---
 
@@ -109,6 +114,8 @@ This node includes a parameter: **`clear_on_size_change`**
   This is the recommended mode. You can manually clear the mask in the editor when needed.
 
 - **`true`** – the mask will be cleared (destroyed) whenever the input image size changes.
+
+Starting from version 2 you can load a mask which you create in some editor. The node now has Load Mask button. Don't forget you have to open the main image first.
 
 ---
 
