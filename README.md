@@ -1,18 +1,13 @@
 ## Other My Nodes
 
-Utilities for working with Lists. Enabling disabling groups etc...
+Utilities for working with Lists, Regions, Toggling groups, Caching conditions: [ComfyUI Utils Extra](https://github.com/akawana/ComfyUI-Utils-extra)
 
-https://github.com/akawana/ComfyUI-Utils-extra
+Folding of promts in to tree with extra features. Extra shortcuts for editing prompts. Reginal prompting text separation: [ComfyUI Folded Prompts](https://github.com/akawana/ComfyUI-Folded-Prompts)
 
-Folding of promts in to tree with extra features. Extra shortcuts for editing prompts. Reginal prompting text separation.
-
-https://github.com/akawana/ComfyUI-Folded-Prompts
-
-RGBYP 5-color mask editor
-
-https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor
+RGBYP 5-color mask editor: [ComfyUI RGBYP Mask Editor](https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor)
 
 ---
+
 ## Version changes
 
 **V 2.02**
