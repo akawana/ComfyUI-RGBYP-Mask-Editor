@@ -233,6 +233,13 @@ class RGBYPMaskBridge:
         # 1.3 outputImage = input image
         outputImage = image
 
+        original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+        try:
+            self._save_tensor_as_png(outputImage, original_temp_path)
+        except Exception as e:
+            print(f"[RGBYPMaskBridge] ERROR saving original to temp: {e}")
+
+
         # 1.4 outputMask = None
         outputMask = None
 
@@ -258,8 +265,8 @@ class RGBYPMaskBridge:
                 print(f"[RGBYPMaskBridge] ERROR writing new json: {e}")
 
             # save input image as original in temp
-            original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
-            self._save_tensor_as_png(outputImage, original_temp_path)
+            # original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+            # self._save_tensor_as_png(outputImage, original_temp_path)
 
             # preview → same original image from temp
             preview_filename = jsonTemp["original"]
@@ -336,8 +343,8 @@ class RGBYPMaskBridge:
                     else:
                         print("[RGBYPMaskBridge] bake failed, fallback preview to original")
                         # save original and use it as preview
-                        original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
-                        self._save_tensor_as_png(outputImage, original_temp_path)
+                        # original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+                        # self._save_tensor_as_png(outputImage, original_temp_path)
                         preview_filename = jsonTemp["original"]
                         preview_type = "temp"
                         preview_subfolder = ""
@@ -369,8 +376,8 @@ class RGBYPMaskBridge:
                         preview_subfolder = "rgbyp"
                     else:
                         print("[RGBYPMaskBridge] bake failed, fallback preview to original")
-                        original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
-                        self._save_tensor_as_png(outputImage, original_temp_path)
+                        # original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+                        # self._save_tensor_as_png(outputImage, original_temp_path)
                         preview_filename = jsonTemp["original"]
                         preview_type = "temp"
                         preview_subfolder = ""
@@ -392,8 +399,8 @@ class RGBYPMaskBridge:
                             f"[RGBYPMaskBridge] ERROR writing reset json (size mismatch, clear=True): {e}"
                         )
                     # save original in temp
-                    original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
-                    self._save_tensor_as_png(outputImage, original_temp_path)
+                    # original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+                    # self._save_tensor_as_png(outputImage, original_temp_path)
                     preview_filename = jsonTemp["original"]
                     preview_type = "temp"
                     preview_subfolder = ""
@@ -405,8 +412,8 @@ class RGBYPMaskBridge:
                     mask_path = os.path.join(temp_dir, mask_name) if mask_name else None
 
                     # Save input image as original in temp with a new name
-                    original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
-                    self._save_tensor_as_png(outputImage, original_temp_path)
+                    # original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+                    # self._save_tensor_as_png(outputImage, original_temp_path)
 
                     baked = self._bake_composite(
                         outputImage, mask_path, updater, composite_temp_path, device
@@ -457,8 +464,8 @@ class RGBYPMaskBridge:
                             "[RGBYPMaskBridge] bake failed (size mismatch, clear=False), fallback preview to original"
                         )
                         # as a safety, save original image (if it was not saved)
-                        original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
-                        self._save_tensor_as_png(outputImage, original_temp_path)
+                        # original_temp_path = os.path.join(temp_dir, jsonTemp["original"])
+                        # self._save_tensor_as_png(outputImage, original_temp_path)
                         preview_filename = jsonTemp["original"]
                         preview_type = "temp"
                         preview_subfolder = ""
