@@ -7,7 +7,36 @@ from PIL import Image
 import nodes
 import folder_paths
 
-print = lambda *a, **k: None  # Disable print statements for cleaner output
+# print = lambda *a, **k: None  # Disable print statements for cleaner output
+
+def getSubfolderName(fileName: str) -> str:
+    """
+    Searches for a file with the given name inside subfolders of ComfyUI/input.
+    Root input directory is ignored.
+
+    Returns:
+        '/subfolder1/subfolder2' if found
+        '' if not found
+    """
+    if not fileName:
+        return ""
+
+    input_dir = folder_paths.get_input_directory()
+    target = fileName.lower()
+
+    for root, dirs, files in os.walk(input_dir):
+        # Skip root input directory itself
+        if os.path.abspath(root) == os.path.abspath(input_dir):
+            continue
+
+        for fn in files:
+            if fn.lower() == target:
+                rel_dir = os.path.relpath(root, input_dir)
+                return f"\\{rel_dir}\\"
+
+    return ""
+
+
 
 class RGBYPLoadImage:
     """
@@ -105,6 +134,7 @@ class RGBYPLoadImage:
     # ------------------------------------------------------------------
     # HELPER FUNCTIONS
     # ------------------------------------------------------------------
+
     @staticmethod
     def _normalize_base_name(raw_name: str) -> str:
         """
@@ -314,10 +344,20 @@ class RGBYPLoadImage:
         )
 
         # 1.3 Save the full path of the selected image into the variable filePath
-        filePath = dir_path
+        # 1.3 Save the full path of the selected image into the variable filePath
+        subfolder_path = getSubfolderName(file_name_ext)
+
+        if subfolder_path:
+            filePath = os.path.join(dir_path, subfolder_path.lstrip("\\"))
+        else:
+            filePath = dir_path + "\\"
 
         # 1.4 Save the image filename without extension into the variable fileName
         fileName = imageOriginalName
+
+        print(
+            f"[RGBYPLoadImage] getSubfolderName('{file_name_ext}') -> '{subfolder_path}'"
+        )
 
         # 2. Check if exists in temp json jsonFileName
         if json_path is not None and os.path.isfile(json_path):

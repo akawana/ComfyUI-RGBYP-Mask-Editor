@@ -15,6 +15,11 @@ https://github.com/akawana/ComfyUI-RGBYP-Mask-Editor
 ---
 ## Version changes
 
+**V 2.02**
+
+The **file_path** output has been fixed. It now returns the path including the subfolder.
+Attention: This works only for the Comfy sandbox, meaning only for the input folder. If you have files with the same name in different subfolders, you may get an incorrect path, because the only way to determine the subfolder inside input is by iterating through subfolders and searching for the file by name.
+
 **V 2.01**
 
 **RGBYPMaskBridge** - now has Open Mask button. You can load mask image if you create it with some other editor. Or saved on prev session with RGBYPSaveMask
@@ -101,6 +106,9 @@ Additional outputs:
 - **file_name** — filename without extension  
 
 Starting from version 2 you can load a mask which you create in some editor. The node now has Load Mask button. Don't forget you have to open the main image first.
+
+The **file_path** now returns the path including the subfolder.
+Attention: This works only for the Comfy sandbox, meaning only for the input folder. If you have files with the same name in different subfolders, you may get an incorrect path, because the only way to determine the subfolder inside input is by iterating through subfolders and searching for the file by name.
 
 ---
 
