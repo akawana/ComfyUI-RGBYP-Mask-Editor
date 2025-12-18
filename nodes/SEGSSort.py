@@ -29,3 +29,13 @@ class SEGSSort:
 
     def doit(self, segs, labels):
         return SEGSSort.sort_segs(segs)
+    
+
+NODE_CLASS_MAPPINGS = {
+    "SEGSSort": SEGSSort,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "SEGSSort": "SEGS Sort",
+}
+
