@@ -117,7 +117,7 @@ class RGBYPLoadImage:
         return base
 
     DESCRIPTION = "Loads an image, outputs RGBYP mask, and outputs helper file name and path."
-    CATEGORY = getattr(nodes.LoadImage, "CATEGORY", "image")
+    CATEGORY = "AK/RGBYP"
 
     RETURN_TYPES = ("IMAGE", "IMAGE", "MASK", "STRING", "STRING")
     RETURN_NAMES = (

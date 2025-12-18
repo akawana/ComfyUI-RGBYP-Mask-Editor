@@ -38,7 +38,7 @@ class RGBYPMaskBridge:
         }
 
     DESCRIPTION = "Takes an input image, lets you draw an RGBYP mask on it, and outputs both the image and the mask."
-    CATEGORY = "image/mask"
+    CATEGORY = "AK/RGBYP"
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image", "rgbyp_mask")
     OUTPUT_NODE = False

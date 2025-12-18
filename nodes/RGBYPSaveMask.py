@@ -29,7 +29,7 @@ class RGBYPSaveMask:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("rgbyp_mask",)
     FUNCTION = "save"
-    CATEGORY = "image/mask"
+    CATEGORY = "AK/RGBYP"
     DESCRIPTION = "Saves rgbyp_mask with the RGBYPMaskBridge PNG logic."
     OUTPUT_NODE = True
 

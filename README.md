@@ -176,6 +176,12 @@ With it, you can now easily create masks with different grayscale values.
 
 ---
 
+## MaskGrowBlur
+
+No need explanation. Simple and in one node.
+
+---
+
 ## F.A.Q.
 
 ### Can I draw masks on regular Load Image and other nodes?

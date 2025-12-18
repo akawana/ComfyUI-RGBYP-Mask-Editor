@@ -54,7 +54,7 @@ class RGBYPMaskCompositeWithStrength:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("mask",)
     FUNCTION = "composite"
-    CATEGORY = "RGBYP/Mask"
+    CATEGORY = "AK/RGBYP"
 
     @staticmethod
     def _ensure_float_mask(mask: torch.Tensor) -> torch.Tensor:

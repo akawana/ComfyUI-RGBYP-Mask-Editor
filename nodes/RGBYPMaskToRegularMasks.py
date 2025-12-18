@@ -45,7 +45,7 @@ class RGBYPMaskToRegularMasks:
         }
 
     DESCRIPTION = "Splits an RGBYP mask into separate masks for each color channel."
-    CATEGORY = "mask"
+    CATEGORY = "AK/RGBYP"
     RETURN_TYPES = ("MASK", "MASK", "MASK", "MASK", "MASK", "MASK")
     RETURN_NAMES = (
         "red_mask",

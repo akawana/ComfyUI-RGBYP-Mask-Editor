@@ -24,6 +24,9 @@ from .nodes.RGBYPMaskCompositeWithStrength import NODE_DISPLAY_NAME_MAPPINGS as 
 from .nodes.RGBYPSaveMask import NODE_CLASS_MAPPINGS as SM_MAPPINGS
 from .nodes.RGBYPSaveMask import NODE_DISPLAY_NAME_MAPPINGS as SM_DISPLAY
 
+from .nodes.MaskGrowBlur import NODE_CLASS_MAPPINGS as MGB_MAPPINGS
+from .nodes.MaskGrowBlur import NODE_DISPLAY_NAME_MAPPINGS as MGB_DISPLAY
+
 NODE_CLASS_MAPPINGS = {
     **RGBYP_BR_MAPPINGS,
     **LI_MAPPINGS,
@@ -32,6 +35,7 @@ NODE_CLASS_MAPPINGS = {
     **MSOUT_MAPPINGS,
     **COMP_MAPPINGS,
     **SM_MAPPINGS,
+    **MGB_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -42,6 +46,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **MSOUT_DISPLAY,
     **COMP_DISPLAY,
     **SM_DISPLAY,
+    **MGB_DISPLAY,
 }
 
 __all__ = [

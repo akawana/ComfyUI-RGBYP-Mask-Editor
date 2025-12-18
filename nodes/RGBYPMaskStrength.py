@@ -23,7 +23,7 @@ class RGBYPMaskStrength:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("strength_settings",)
     FUNCTION = "build"
-    CATEGORY = "mask"
+    CATEGORY = "AK/RGBYP"
 
     def build(self, red_strength, green_strength, blue_strength, yellow_strength, pink_strength, combined_strength):
         settings = {

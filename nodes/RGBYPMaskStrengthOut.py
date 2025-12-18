@@ -19,7 +19,7 @@ class RGBYPMaskStrengthOut:
         "combined_strength",
     )
     FUNCTION = "extract"
-    CATEGORY = "mask"
+    CATEGORY = "AK/RGBYP"
 
     def _to_float(self, v, default=0.0):
         try:
