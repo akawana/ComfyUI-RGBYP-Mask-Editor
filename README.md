@@ -12,6 +12,12 @@ AK XZ Axis so called XY testing for any type of KSampler: [ComfyUI AK XZ Axis](h
 
 ## Version changes
 
+**V 3.05**
+
+> RGBYPMaskToRegularMask - added combined_mask added strength_settings input to regulate output masks strength
+> RGBYPMaskStrength - added combined_mask strength
+> RGBYPMaskStrengthOut - added combined_mask strength output
+
 **V 2.02**
 
 The **file_path** output has been fixed. It now returns the path including the subfolder.
@@ -146,12 +152,18 @@ It is a simple Image Saver which takes file_path and file_name. Useful and easy 
 Converts a single RGBYP mask image into **five separate grayscale masks**.  
 A minimalistic utility for quick splitting.
 
+Has **strength_settings** input to communicate with **RGBYPMaskStrength** node and output masks with strength. 
+
+Has **combined_mask** output to get one combined mask, which can use separate stranges for each color or one common strange.
+
 ---
 
 ## RGBYPMaskStrength + RGBYPMaskStrengthOut
 
 Two nodes that work together as a pair.
 The first node allows you to set the mask strength for each of the five colors, and the second node simply expands these settings wherever you need them.
+
+**RGBYPMaskStrength** now communicates with **RGBYPMaskToRegularMasks**
 
 ---
 

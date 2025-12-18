@@ -1,4 +1,5 @@
 import torch
+import json
 
 class RGBYPMaskToRegularMasks:
     """
@@ -36,18 +37,23 @@ class RGBYPMaskToRegularMasks:
         return {
             "required": {
                 "rgbyp_mask": ("IMAGE",),
-            }
+                "own_strength_in_combined": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
+                "strength_settings": ("STRING", {"forceInput": True}),
+            },
         }
 
     DESCRIPTION = "Splits an RGBYP mask into separate masks for each color channel."
     CATEGORY = "mask"
-    RETURN_TYPES = ("MASK", "MASK", "MASK", "MASK", "MASK")
+    RETURN_TYPES = ("MASK", "MASK", "MASK", "MASK", "MASK", "MASK")
     RETURN_NAMES = (
         "red_mask",
         "green_mask",
         "blue_mask",
         "yellow_mask",
         "pink_mask",
+        "combined_mask",
     )
     FUNCTION = "convert"
 
@@ -55,7 +61,7 @@ class RGBYPMaskToRegularMasks:
 #    def IS_CHANGED(cls, rgbyp_mask, **kwargs):
 #        return float("nan")
 
-    def convert(self, rgbyp_mask):
+    def convert(self, rgbyp_mask, own_strength_in_combined=False, strength_settings=None):
         """
         rgbyp_mask: torch.Tensor, shape (B, H, W, C), values [0..1]
         """
@@ -71,7 +77,47 @@ class RGBYPMaskToRegularMasks:
         device = rgbyp_mask.device
         B, H, W, C = rgbyp_mask.shape
 
-        # Extract R, G, B channels
+        def _parse_strength_settings(v):
+            if v is None:
+                return None
+            if isinstance(v, str):
+                s = v.strip()
+                if not s:
+                    return None
+                try:
+                    return json.loads(s)
+                except Exception:
+                    return None
+            if isinstance(v, dict):
+                return v
+            return None
+
+        settings = _parse_strength_settings(strength_settings)
+        use_settings = isinstance(settings, dict) and settings.get("ak_id") == "mask_strength_settings"
+
+        def _get_strength(key):
+            if not use_settings:
+                return 1.0
+            try:
+                val = float(settings.get(key, 1.0))
+            except Exception:
+                val = 1.0
+            if val < 0.0:
+                val = 0.0
+            if val > 1.0:
+                val = 1.0
+            return val
+
+        red_strength = _get_strength("red_strength")
+        green_strength = _get_strength("green_strength")
+        blue_strength = _get_strength("blue_strength")
+        yellow_strength = _get_strength("yellow_strength")
+        pink_strength = _get_strength("pink_strength")
+
+
+     
+        combined_strength = _get_strength("combined_strength")
+   # Extract R, G, B channels
         r = rgbyp_mask[..., 0]
         g = rgbyp_mask[..., 1]
         b = rgbyp_mask[..., 2]
@@ -102,6 +148,23 @@ class RGBYPMaskToRegularMasks:
         yellow_mask = yellow_bool.float()
         pink_mask = pink_bool.float()
 
+        red_mask_raw = red_mask
+        green_mask_raw = green_mask
+        blue_mask_raw = blue_mask
+        yellow_mask_raw = yellow_mask
+        pink_mask_raw = pink_mask
+
+        red_mask = red_mask * red_strength
+        green_mask = green_mask * green_strength
+        blue_mask = blue_mask * blue_strength
+        yellow_mask = yellow_mask * yellow_strength
+        pink_mask = pink_mask * pink_strength
+
+        if own_strength_in_combined:
+            combined_mask = red_mask + green_mask + blue_mask + yellow_mask + pink_mask
+        else:
+            combined_mask = (red_mask_raw + green_mask_raw + blue_mask_raw + yellow_mask_raw + pink_mask_raw) * combined_strength
+
         # If mask has no non-zero pixels, replace with (B, 64, 64) black mask
         def ensure_non_empty_or_64x64(mask):
             if mask.sum() == 0:
@@ -113,6 +176,7 @@ class RGBYPMaskToRegularMasks:
         blue_mask = ensure_non_empty_or_64x64(blue_mask)
         yellow_mask = ensure_non_empty_or_64x64(yellow_mask)
         pink_mask = ensure_non_empty_or_64x64(pink_mask)
+        combined_mask = ensure_non_empty_or_64x64(combined_mask)
 
         return (
             red_mask,
@@ -120,6 +184,7 @@ class RGBYPMaskToRegularMasks:
             blue_mask,
             yellow_mask,
             pink_mask,
+            combined_mask,
         )
 
 
