@@ -268,6 +268,17 @@ async function uploadComfyFile(file, type = "temp", subfolder) {
     }
 }
 
+function isCanvasEmpty(canvas) {
+    const ctx = canvas.getContext("2d");
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    for (let i = 3; i < data.length; i += 4) {
+        if (data[i] !== 0) return false; // alpha != 0
+    }
+    return true;
+}
+
+
 export async function saveMask() {
     const node = GP.baseNode;
     if (!node) {
@@ -359,9 +370,16 @@ export async function saveMask() {
     }
 
     // ---------- 5. Save mask ----------
-    const maskDataUrl = maskCanvas.toDataURL("image/png");
-    const maskFile = dataURLtoFile(maskDataUrl, maskName);
-    await uploadComfyFile(maskFile, "temp");
+    const maskIsEmpty = isCanvasEmpty(maskCanvas);
+
+    if (!maskIsEmpty) {
+        const maskDataUrl = maskCanvas.toDataURL("image/png");
+        const maskFile = dataURLtoFile(maskDataUrl, maskName);
+        await uploadComfyFile(maskFile, "temp");
+    } else {
+        // important: we intentionally do NOT save any mask file
+        maskName = ""; // this will go into meta JSON as empty
+    }
     // console.log("[RGBYP] saveMask: mask saved", maskName);
 
     // ---------- 6. Save composite ----------
@@ -391,7 +409,7 @@ export async function saveMask() {
     // console.log("[RGBYP] saveMask: composite saved", compositeName, "opacity =", state.maskOpacity);
 
     // ---------- 7. Save / update meta JSON ----------
-    if (!reuseExistingNames) {
+    // if (!reuseExistingNames) {
         const imgW = baseImg.naturalWidth || baseImg.width || originalCanvas.width;
         const imgH = baseImg.naturalHeight || baseImg.height || originalCanvas.height;
 
@@ -421,9 +439,9 @@ export async function saveMask() {
         });
         // console.log("[NODE STATE] saveMask: temp paths:", getNodeState(node.id).tempComposite);
 
-    } else {
+    // } else {
         // console.log("[RGBYP] saveMask: meta json left unchanged", metaFilename);
-    }
+    // }
 
     // ---------- 8. Write paths into state for updatePreview ----------
 }
