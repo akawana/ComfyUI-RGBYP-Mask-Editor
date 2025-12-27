@@ -6,12 +6,30 @@ let originalFileName = null;
 let maskFileName = null;
 let compositeFileName = null;
 
+function releaseImage(img) {
+    if (!img) return;
+    try {
+        img.onload = null;
+        img.onerror = null;
+        img.src = "";
+        img = null;
+    } catch (_) {
+    }
+}
+
 function loadImageFromFile(file) {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (e) => reject(e);
-        img.src = URL.createObjectURL(file);
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(img);
+        };
+        img.onerror = (e) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(e);
+        };
+        img.src = objectUrl;
     });
 }
 
@@ -498,6 +516,14 @@ async function tryUpdateCompositePreviewForNode(node) {
             `[RGBYPMaskBridgeRedraw] node id=${node.id}: composite EXISTS → updating node preview`
         );
      */
+
+    let oldImg = node.img;
+    if (!oldImg && Array.isArray(node.imgs) && node.imgs.length > 0) {
+        oldImg = node.imgs[0];
+    }
+    if (oldImg) {
+        releaseImage(oldImg);
+    }
     // We will not use resp.body, we just create an Image with the same URL
     const img = new Image();
     img.src = compositeUrl;
