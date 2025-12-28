@@ -1,8 +1,6 @@
 import { registerKeyHandlers, unregisterKeyHandlers } from "./RGBYPMaskEditor_keys.js";
 import { initBaseImageAndCanvas } from "./RGBYPMaskEditor_io.js";
-import { GP } from "./RGBYPMaskEditor.js";
-import { getNodeState } from "./RGBYPMaskEditor.js";
-import { setNodeState } from "./RGBYPMaskEditor.js";
+import { GP, getNodeState, setNodeState, cleanupEditorState } from "./RGBYPMaskEditor.js";
 import { HELP } from "./RGBYPMaskEditor.js";
 
 const extensionBaseUrl = "/extensions/ComfyUI-RGBYP-Mask-Editor/";
@@ -87,6 +85,8 @@ export function openMaskEditor(node) {
     dialog.style.borderRadius = "8px";
     dialog.style.boxShadow = "0 0 25px rgba(0,0,0,0.8)";
     dialog.style.padding = "10px 12px 12px 12px";
+
+    setNodeState(GP.baseNode.id, { dialogElement: dialog });
 
     const margin = 40;
     const vw = window.innerWidth || 1280;
@@ -402,7 +402,7 @@ export function openMaskEditor(node) {
     helpPanel.style.bottom = "0";
     helpPanel.style.zIndex = "10";
     const headerHeight = header.getBoundingClientRect().height;
-    helpPanel.style.top = headerHeight + "px";    
+    helpPanel.style.top = headerHeight + "px";
 
     // cover only the area under the header
     helpPanel.style.display = "none";            // hidden by default
@@ -422,7 +422,7 @@ export function openMaskEditor(node) {
     helpFooter.style.justifyContent = "flex-end";
     helpFooter.style.marginTop = "16px";
 
-    const helpCloseBtn = makeTextButton("Close", true); 
+    const helpCloseBtn = makeTextButton("Close", true);
     setNodeState(GP.baseNode.id, { helpCloseBtn: helpCloseBtn });
 
     helpFooter.appendChild(helpCloseBtn);
@@ -453,6 +453,7 @@ export function openMaskEditor(node) {
 
     function closeEditor() {
         unregisterKeyHandlers(dialog);
+        cleanupEditorState(GP.baseNode.id);
         if (overlay.parentNode) {
             overlay.parentNode.removeChild(overlay);
         }

@@ -6,6 +6,52 @@ export const GP = {
     baseNode: null,
 };
 
+export function releaseImage(img) {
+    if (!img) return;
+    try {
+        img.onload = null;
+        img.onerror = null;
+        img.src = "";
+        img = null;
+    } catch (_) {
+    }
+}
+
+export function cleanupEditorState(nodeId) {
+    const state = getNodeState(nodeId);
+    if (!state) return;
+
+    if (state.baseImg) {
+        releaseImage(state.baseImg);
+        state.baseImg = null;
+    }
+    if (state.maskImg) {
+        releaseImage(state.maskImg);
+        state.maskImg = null;
+    }
+
+    state.originalCanvas = null;
+    state.maskCanvas = null;
+    state.canvasContainer = null;
+    state.centralPanel = null;
+    state.drawCursor = null;
+
+    state.colorButtons = [];
+    state.brushSlider = null;
+    state.opacitySlider = null;
+    state.brushBtn = null;
+    state.eraseBtn = null;
+    state.scrollBtn = null;
+    state.clearBtn = null;
+    state.saveBtn = null;
+    state.helpIcon = null;
+    state.helpPanel = null;
+    state.helpCloseBtn = null;
+
+    state.overlayDialog = null;
+    state.dialogElement = null;
+}
+
 export function setNodeState(nodeId, partial) {
     const state = getNodeState(nodeId);
     Object.assign(state, partial);   // updates only the specified fields

@@ -8,16 +8,33 @@ let jsonFileName = null;
 let originalFileName = null;
 let maskFileName = null;
 let compositeFileName = null;
-let imageWidget = null;   
+let imageWidget = null;
 
 (function () {
-    // Utility: load HTMLImageElement from a File
     function loadImageFromFile(file) {
         return new Promise((resolve, reject) => {
             const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = (e) => reject(e);
-            img.src = URL.createObjectURL(file);
+            const objectUrl = URL.createObjectURL(file);
+
+            img.onload = () => {
+                try {
+                    URL.revokeObjectURL(objectUrl);
+                } catch (e) {
+                    console.warn("[RGBYPLoadImage] Failed to revoke object URL:", e);
+                }
+                resolve(img);
+            };
+
+            img.onerror = (e) => {
+                try {
+                    URL.revokeObjectURL(objectUrl);
+                } catch (err) {
+                    console.warn("[RGBYPLoadImage] Failed to revoke object URL on error:", err);
+                }
+                reject(e);
+            };
+
+            img.src = objectUrl;
         });
     }
 
@@ -206,21 +223,6 @@ let imageWidget = null;
         }, 0);
 
 
-        // Force the buttons to be the first widgets visually
-        /*         if (node.widgets && node.widgets.length > 1) {
-                    const widgets = node.widgets;
-                    const idxLoad = widgets.indexOf(btnWidget);
-                    if (idxLoad > 0) {
-                        widgets.splice(idxLoad, 1);
-                        widgets.unshift(btnWidget);
-                    }
-                    const idxReset = widgets.indexOf(resetWidget);
-                    if (idxReset > 0) {
-                        widgets.splice(idxReset, 1);
-                        widgets.splice(1, 0, resetWidget);
-                    }
-                }
-         */
         fileInput.addEventListener("change", async (ev) => {
             const file = ev.target.files?.[0];
             if (!file) return;

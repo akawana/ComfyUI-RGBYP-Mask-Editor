@@ -1,18 +1,20 @@
-import { GP, getNodeState } from "./RGBYPMaskEditor.js"
+import { GP, getNodeState, cleanupEditorState } from "./RGBYPMaskEditor.js";
 import { colorListRGB, updateToolButtonsHighlight, updateSelectedColorUI } from "./RGBYPMaskEditor_ui.js";
 import { saveMask, updatePreview } from "./RGBYPMaskEditor_io.js";
 
 
+
 const closeEditor = () => {
     const state = getNodeState(GP.baseNode.id);
+    if (!state) return;
 
     const dialog = state.dialogElement;
     const overlay = state.overlayDialog;
 
-    
     unregisterKeyHandlers(dialog);
 
-    
+    cleanupEditorState(GP.baseNode.id);
+
     if (overlay && overlay.parentNode) {
         overlay.parentNode.removeChild(overlay);
     }
