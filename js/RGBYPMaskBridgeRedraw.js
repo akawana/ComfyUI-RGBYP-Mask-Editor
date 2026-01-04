@@ -233,8 +233,16 @@ function ensureMaskBridgeButtons(node) {
             console.warn("[RGBYPMaskBridge] No unique_id found, aborting mask processing.");
             return;
         }
+        const jsonName = `RGBYP_${uniqueId}.json`;
+        const jsonUrl = api.apiURL(
+            `/view?filename=${encodeURIComponent(jsonName)}&type=temp&subfolder=`
+        );
+        const meta = await fetch(jsonUrl).then(r => r.json());
+        originalFileName = meta.original;
+        const src = api.apiURL(
+            `/view?filename=${encodeURIComponent(originalFileName)}&type=temp&subfolder=`
+        );
 
-        const src = getNodePreviewSrc(node);
         const filename = tryResolveFilenameFromSrc(src);
         if (!filename) {
             console.warn("[RGBYPMaskBridge] Cannot resolve filename from current preview, aborting.");
