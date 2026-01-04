@@ -1,5 +1,8 @@
 import torch
 import json
+import numpy as np
+from PIL import Image, ImageFilter
+
 
 class RGBYPMaskToRegularMasks:
     """
@@ -38,6 +41,8 @@ class RGBYPMaskToRegularMasks:
             "required": {
                 "rgbyp_mask": ("IMAGE",),
                 "own_strength_in_combined": ("BOOLEAN", {"default": False}),
+                "grow_strength": ("INT", {"default": 0, "min": 0, "step": 1}),
+                "blur_strength": ("INT", {"default": 0, "min": 0, "step": 1}),
             },
             "optional": {
                 "strength_settings": ("STRING", {"forceInput": True}),
@@ -57,11 +62,99 @@ class RGBYPMaskToRegularMasks:
     )
     FUNCTION = "convert"
 
-#    @classmethod
-#    def IS_CHANGED(cls, rgbyp_mask, **kwargs):
-#        return float("nan")
+    # @classmethod
+    # def IS_CHANGED(cls, rgbyp_mask, **kwargs):
+    #     return float("nan")
 
-    def convert(self, rgbyp_mask, own_strength_in_combined=False, strength_settings=None):
+    def _parse_strength_settings(self, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            try:
+                return json.loads(s)
+            except Exception:
+                return None
+        if isinstance(v, dict):
+            return v
+        return None
+
+    def _get_strength(self, settings, use_settings, key):
+        if not use_settings:
+            return 1.0
+        try:
+            val = float(settings.get(key, 1.0))
+        except Exception:
+            val = 1.0
+        if val < 0.0:
+            val = 0.0
+        if val > 1.0:
+            val = 1.0
+        return val
+
+    def _apply_grow_blur(self, mask, grow_strength, blur_strength):
+        if mask is None:
+            return None
+
+        gs = int(grow_strength) if grow_strength is not None else 0
+        bs = int(blur_strength) if blur_strength is not None else 0
+        gs = max(gs, 0)
+        bs = max(bs, 0)
+
+        if gs == 0 and bs == 0:
+            return mask
+
+        device = mask.device
+        dtype = mask.dtype
+
+        t = mask.detach().to("cpu").float()
+
+        if t.dim() == 2:
+            batch = [t]
+            batched = False
+        elif t.dim() == 3:
+            batch = [t[i] for i in range(t.shape[0])]
+            batched = True
+        else:
+            batch = [t.reshape(t.shape[-2], t.shape[-1])]
+            batched = False
+
+        out_list = []
+        for m in batch:
+            arr = m.numpy()
+            arr = np.clip(arr, 0.0, 1.0)
+            img = (arr * 255.0 + 0.5).astype(np.uint8)
+            pil = Image.fromarray(img, mode="L")
+
+            if gs > 0:
+                k = gs * 2 + 1
+                pil = pil.filter(ImageFilter.MaxFilter(size=k))
+
+            if bs > 0:
+                pil = pil.filter(ImageFilter.GaussianBlur(radius=bs))
+
+            out = torch.from_numpy(np.array(pil, dtype=np.float32) / 255.0)
+            out = torch.clamp(out, 0.0, 1.0)
+            out_list.append(out)
+
+        if batched:
+            out_t = torch.stack(out_list, dim=0)
+        else:
+            out_t = out_list[0]
+
+        out_t = out_t.to(device=device, dtype=dtype)
+        return out_t
+
+    def convert(
+        self,
+        rgbyp_mask,
+        own_strength_in_combined=False,
+        grow_strength=0,
+        blur_strength=0,
+        strength_settings=None,
+    ):
         """
         rgbyp_mask: torch.Tensor, shape (B, H, W, C), values [0..1]
         """
@@ -77,47 +170,17 @@ class RGBYPMaskToRegularMasks:
         device = rgbyp_mask.device
         B, H, W, C = rgbyp_mask.shape
 
-        def _parse_strength_settings(v):
-            if v is None:
-                return None
-            if isinstance(v, str):
-                s = v.strip()
-                if not s:
-                    return None
-                try:
-                    return json.loads(s)
-                except Exception:
-                    return None
-            if isinstance(v, dict):
-                return v
-            return None
-
-        settings = _parse_strength_settings(strength_settings)
+        settings = self._parse_strength_settings(strength_settings)
         use_settings = isinstance(settings, dict) and settings.get("ak_id") == "mask_strength_settings"
 
-        def _get_strength(key):
-            if not use_settings:
-                return 1.0
-            try:
-                val = float(settings.get(key, 1.0))
-            except Exception:
-                val = 1.0
-            if val < 0.0:
-                val = 0.0
-            if val > 1.0:
-                val = 1.0
-            return val
+        red_strength = self._get_strength(settings, use_settings, "red_strength")
+        green_strength = self._get_strength(settings, use_settings, "green_strength")
+        blue_strength = self._get_strength(settings, use_settings, "blue_strength")
+        yellow_strength = self._get_strength(settings, use_settings, "yellow_strength")
+        pink_strength = self._get_strength(settings, use_settings, "pink_strength")
+        combined_strength = self._get_strength(settings, use_settings, "combined_strength")
 
-        red_strength = _get_strength("red_strength")
-        green_strength = _get_strength("green_strength")
-        blue_strength = _get_strength("blue_strength")
-        yellow_strength = _get_strength("yellow_strength")
-        pink_strength = _get_strength("pink_strength")
-
-
-     
-        combined_strength = _get_strength("combined_strength")
-   # Extract R, G, B channels
+        # Extract R, G, B channels
         r = rgbyp_mask[..., 0]
         g = rgbyp_mask[..., 1]
         b = rgbyp_mask[..., 2]
@@ -163,7 +226,13 @@ class RGBYPMaskToRegularMasks:
         if own_strength_in_combined:
             combined_mask = red_mask + green_mask + blue_mask + yellow_mask + pink_mask
         else:
-            combined_mask = (red_mask_raw + green_mask_raw + blue_mask_raw + yellow_mask_raw + pink_mask_raw) * combined_strength
+            combined_mask = (
+                red_mask_raw
+                + green_mask_raw
+                + blue_mask_raw
+                + yellow_mask_raw
+                + pink_mask_raw
+            ) * combined_strength
 
         # If mask has no non-zero pixels, replace with (B, 64, 64) black mask
         def ensure_non_empty_or_64x64(mask):
@@ -177,6 +246,13 @@ class RGBYPMaskToRegularMasks:
         yellow_mask = ensure_non_empty_or_64x64(yellow_mask)
         pink_mask = ensure_non_empty_or_64x64(pink_mask)
         combined_mask = ensure_non_empty_or_64x64(combined_mask)
+
+        red_mask = self._apply_grow_blur(red_mask, grow_strength, blur_strength)
+        green_mask = self._apply_grow_blur(green_mask, grow_strength, blur_strength)
+        blue_mask = self._apply_grow_blur(blue_mask, grow_strength, blur_strength)
+        yellow_mask = self._apply_grow_blur(yellow_mask, grow_strength, blur_strength)
+        pink_mask = self._apply_grow_blur(pink_mask, grow_strength, blur_strength)
+        combined_mask = self._apply_grow_blur(combined_mask, grow_strength, blur_strength)
 
         return (
             red_mask,
