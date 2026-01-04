@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from PIL import Image
+import folder_paths
 
 
 class RGBYPSaveMask:
@@ -20,17 +21,25 @@ class RGBYPSaveMask:
                         "label_off": "Exact name",
                     },
                 ),
+                "override": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Override last mask",
+                        "label_off": "Increment 01..99",
+                    },
+                ),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
-            }
+            },
         }
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("rgbyp_mask",)
     FUNCTION = "save"
     CATEGORY = "AK/RGBYP"
-    DESCRIPTION = "Saves rgbyp_mask with the RGBYPMaskBridge PNG logic."
+    DESCRIPTION = "Saves rgbyp_mask PNG to a folder with optional postfix and versioning."
     OUTPUT_NODE = True
 
     def _save_tensor_as_png(self, image_tensor, path):
@@ -52,23 +61,22 @@ class RGBYPSaveMask:
         except Exception as e:
             print(f"[RGBYPSaveMask] ERROR saving PNG '{path}': {e}")
 
-    def save(self, rgbyp_mask, file_path, file_name, add_postfix=True, unique_id=None):
+    def save(self, rgbyp_mask, file_path, file_name, add_postfix=True, override=True, unique_id=None):
         if not isinstance(file_path, str) or not isinstance(file_name, str):
             return (rgbyp_mask,)
 
         file_path = file_path.strip()
         file_name = file_name.strip()
 
-        if not file_path or not file_name:
-            return (rgbyp_mask,)
+        if not file_path:
+            default_input = folder_paths.get_input_directory()
+            file_path = os.path.join(default_input, "rgbyp_masks")
+
+        if not file_name:
+            file_name = "mask"
 
         if not file_path.endswith("/") and not file_path.endswith("\\"):
             file_path = file_path + os.sep
-
-        if add_postfix:
-            final_name = f"{file_name}_rgbyp_mask_{unique_id}"
-        else:
-            final_name = file_name
 
         folder = os.path.expanduser(file_path)
         folder = os.path.normpath(folder)
@@ -78,6 +86,51 @@ class RGBYPSaveMask:
         except Exception as e:
             print(f"[RGBYPSaveMask] ERROR creating directory '{folder}': {e}")
             return (rgbyp_mask,)
+
+        base_name = file_name
+
+        if add_postfix:
+            base_with_suffix = f"{base_name}_rgbyp_mask"
+
+            if override:
+                if unique_id is not None:
+                    final_name = f"{base_with_suffix}_{unique_id}"
+                else:
+                    final_name = base_with_suffix
+            else:
+                if unique_id is not None:
+                    base_with_suffix_node = f"{base_with_suffix}_{unique_id}"
+                else:
+                    base_with_suffix_node = base_with_suffix
+
+                max_index = 0
+                try:
+                    for existing in os.listdir(folder):
+                        if not existing.lower().endswith(".png"):
+                            continue
+
+                        name_no_ext, _ = os.path.splitext(existing)
+                        prefix = base_with_suffix_node + "_"
+
+                        if not name_no_ext.startswith(prefix):
+                            continue
+
+                        tail = name_no_ext[len(prefix):]
+                        if len(tail) == 2 and tail.isdigit():
+                            idx = int(tail)
+                            if 1 <= idx <= 99 and idx > max_index:
+                                max_index = idx
+                except Exception as e:
+                    print(f"[RGBYPSaveMask] ERROR scanning folder '{folder}' for mask indexes: {e}")
+                    max_index = 0
+
+                next_index = max_index + 1
+                if next_index > 99:
+                    next_index = 99
+
+                final_name = f"{base_with_suffix_node}_{next_index:02d}"
+        else:
+            final_name = base_name
 
         full_path = os.path.join(folder, final_name + ".png")
 
