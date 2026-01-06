@@ -4,6 +4,101 @@ import { saveMask, updatePreview } from "./RGBYPMaskEditor_io.js";
 
 
 
+
+async function copyMaskToClipboard() {
+    const state = getNodeState(GP.baseNode.id);
+    if (!state || !state.maskCanvas) return;
+    const canvas = state.maskCanvas;
+
+// skip if mask is empty (fully transparent)
+const ctx = canvas.getContext("2d");
+if (ctx) {
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let hasAlpha = false;
+    for (let i = 3; i < data.length; i += 4) {
+        if (data[i] !== 0) {
+            hasAlpha = true;
+            break;
+        }
+    }
+    if (!hasAlpha) return;
+}
+
+
+    try {
+        if (navigator.clipboard && window.ClipboardItem) {
+            const blob = await new Promise((resolve) => {
+                canvas.toBlob((b) => resolve(b), "image/png");
+            });
+            if (!blob) return;
+            const item = new ClipboardItem({ "image/png": blob });
+            await navigator.clipboard.write([item]);
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+            const dataUrl = canvas.toDataURL("image/png");
+            await navigator.clipboard.writeText(dataUrl);
+        }
+    } catch (err) {
+        console.error("[RGBYP] copyMaskToClipboard error:", err);
+    }
+}
+
+async function pasteMaskFromClipboard() {
+    const state = getNodeState(GP.baseNode.id);
+    if (!state || !state.maskCanvas) return;
+    const canvas = state.maskCanvas;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+            const items = await navigator.clipboard.read();
+            let imageBlob = null;
+
+            for (const item of items) {
+                for (const type of item.types) {
+                    if (type.startsWith("image/")) {
+                        imageBlob = await item.getType(type);
+                        break;
+                    }
+                }
+                if (imageBlob) break;
+            }
+
+            if (!imageBlob) return;
+
+            const img = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => {
+                    URL.revokeObjectURL(image.src);
+                    resolve(image);
+                };
+                image.onerror = (e) => reject(e);
+                image.src = URL.createObjectURL(imageBlob);
+            });
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = "source-over";
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        } else if (navigator.clipboard && navigator.clipboard.readText) {
+            const text = await navigator.clipboard.readText();
+            if (!text || !text.startsWith("data:image")) return;
+
+            const img = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = (e) => reject(e);
+                image.src = text;
+            });
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = "source-over";
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
+    } catch (err) {
+        console.error("[RGBYP] pasteMaskFromClipboard error:", err);
+    }
+}
+
 const closeEditor = () => {
     const state = getNodeState(GP.baseNode.id);
     if (!state) return;
@@ -853,6 +948,25 @@ export function registerKeyHandlers(scopeElement) {
             closeEditor();
         };
     }
+
+
+const copyMaskBtn = scopeElement.querySelector('button[data-tool="Copy Mask"]');
+if (copyMaskBtn) {
+    copyMaskBtn.onclick = async(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await copyMaskToClipboard();
+    };
+}
+
+const pasteMaskBtn = scopeElement.querySelector('button[data-tool="Paste Mask"]');
+if (pasteMaskBtn) {
+    pasteMaskBtn.onclick = async(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await pasteMaskFromClipboard();
+    };
+}
 
 }
 

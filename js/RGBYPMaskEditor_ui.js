@@ -375,6 +375,14 @@ export function openMaskEditor(node) {
     rightPanel.appendChild(Object.assign(document.createElement("div"), { style: "height:16px;" }));
     rightPanel.appendChild(autoMaskButtonsRow);
 
+    const copyMaskBtn = makeTextButton("Copy Mask", false);
+    copyMaskBtn.style.marginTop = "20px";
+    copyMaskBtn.style.background = "#000";
+    const pasteMaskBtn = makeTextButton("Paste Mask", false);
+    pasteMaskBtn.style.background = "#000";
+    rightPanel.appendChild(copyMaskBtn);
+    rightPanel.appendChild(pasteMaskBtn);
+
     function makeTextButton(label, primary) {
         const btn = document.createElement("button");
         btn.textContent = label;
