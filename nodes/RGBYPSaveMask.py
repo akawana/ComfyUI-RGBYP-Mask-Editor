@@ -130,7 +130,34 @@ class RGBYPSaveMask:
 
                 final_name = f"{base_with_suffix_node}_{next_index:02d}"
         else:
-            final_name = base_name
+            if override:
+                final_name = base_name
+            else:
+                max_index = 0
+                try:
+                    for existing in os.listdir(folder):
+                        if not existing.lower().endswith(".png"):
+                            continue
+
+                        name_no_ext, _ = os.path.splitext(existing)
+                        prefix = base_name + "_"
+                        if not name_no_ext.startswith(prefix):
+                            continue
+
+                        tail = name_no_ext[len(prefix):]
+                        if len(tail) == 2 and tail.isdigit():
+                            idx = int(tail)
+                            if 1 <= idx <= 99 and idx > max_index:
+                                max_index = idx
+                except Exception as e:
+                    print(f"[RGBYPSaveMask] ERROR scanning folder '{folder}' for mask indexes: {e}")
+                    max_index = 0
+
+                next_index = max_index + 1
+                if next_index > 99:
+                    next_index = 99
+
+                final_name = f"{base_name}_{next_index:02d}"
 
         full_path = os.path.join(folder, final_name + ".png")
 
