@@ -11,27 +11,30 @@ const TARGET_NODES = [
     // "RGBYPMaskToList",
 ];
 
-function addSpacerWidget(nodeName, beforeWidgetName, seze=20) {
+function addSpacerWidget(nodeName, beforeWidgetName, seze = 20) {
     app.registerExtension({
-        name: `AK.AddSpacer.${nodeName}.${beforeWidgetName}`,
+        name: "AddSpacer",
         nodeCreated(node) {
-            // console.log(`Adding spacer to ${nodeName} before ${beforeWidgetName}`);
-            if (node.comfyClass !== nodeName) return;
-            const spacer = node.addWidget("custom", "", "", () => {});
-            spacer.serialize = false;
-            spacer.computeSize = () => [1, seze];
+            if (!TARGET_NODES.has(node.type)) return;
 
-            const widgets = node.widgets || [];
-            const targetIndex = widgets.findIndex(w => w.name === beforeWidgetName);
+            const origOnConfigure = node.onConfigure;
 
-            widgets.splice(widgets.indexOf(spacer), 1);
+            node.onConfigure = function () {
+                if (origOnConfigure) {
+                    origOnConfigure.apply(this, arguments);
+                }
 
-            if (targetIndex !== -1) {
-                widgets.splice(targetIndex, 0, spacer);
-            } else {
-                widgets.push(spacer);
+                addSpacerWidget(this, targetWidgetName);
+            };
+
+            if (!origOnConfigure) {
+                queueMicrotask(() => {
+                    if (!node.__spacer_added) {
+                        addSpacerWidget(node, targetWidgetName);
+                    }
+                });
             }
-        },
+        }
     });
 }
 
