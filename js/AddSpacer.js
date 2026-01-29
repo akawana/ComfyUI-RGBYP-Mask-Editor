@@ -13,28 +13,38 @@ const TARGET_NODES = [
 
 function addSpacerWidget(nodeName, beforeWidgetName, seze = 20) {
     app.registerExtension({
-        name: "AddSpacer",
+        name: `AK.AddSpacer.${nodeName}.${beforeWidgetName}`,
         nodeCreated(node) {
-            if (!TARGET_NODES.has(node.type)) return;
+            if (node.comfyClass !== nodeName) return;
 
-            const origOnConfigure = node.onConfigure;
+            const insertSpacer = () => {
+                if (node.__ak_spacer_added) return;
+                node.__ak_spacer_added = true;
 
-            node.onConfigure = function () {
-                if (origOnConfigure) {
-                    origOnConfigure.apply(this, arguments);
+                const spacer = node.addWidget("custom", "", "", () => { });
+                spacer.serialize = false;
+                spacer.computeSize = () => [1, seze];
+
+                const widgets = node.widgets || [];
+                const targetIndex = widgets.findIndex(w => w.name === beforeWidgetName);
+
+                widgets.splice(widgets.indexOf(spacer), 1);
+
+                if (targetIndex !== -1) {
+                    widgets.splice(targetIndex, 0, spacer);
+                } else {
+                    widgets.push(spacer);
                 }
-
-                addSpacerWidget(this, targetWidgetName);
             };
 
-            if (!origOnConfigure) {
-                queueMicrotask(() => {
-                    if (!node.__spacer_added) {
-                        addSpacerWidget(node, targetWidgetName);
-                    }
-                });
-            }
-        }
+            const origOnConfigure = node.onConfigure;
+            node.onConfigure = function () {
+                if (origOnConfigure) origOnConfigure.apply(this, arguments);
+                insertSpacer();
+            };
+
+            queueMicrotask(insertSpacer);
+        },
     });
 }
 
