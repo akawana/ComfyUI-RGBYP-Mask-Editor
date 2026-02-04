@@ -184,10 +184,6 @@ class RGBYPLoadImage:
         temp_dir = folder_paths.get_temp_directory()
         os.makedirs(temp_dir, exist_ok=True)
 
-        print(
-            f"[RGBYPLoadImage] _read_meta_paths: "
-            f"base_name='{base_name}', unique_id='{unique_id}', temp_dir='{temp_dir}'"
-        )
 
         if not base_name or not unique_id:
             print("[RGBYPLoadImage] _read_meta_paths: base_name or unique_id is empty -> no meta.json")
@@ -197,10 +193,6 @@ class RGBYPLoadImage:
         meta_filename = f"{base_name}_{unique_id}_meta.json"
         meta_path = os.path.join(temp_dir, meta_filename)
 
-        print(
-            f"[RGBYPLoadImage] _read_meta_paths: looking for meta json file "
-            f"'{meta_filename}' at '{meta_path}'"
-        )
 
         if not os.path.isfile(meta_path):
             print(f"[RGBYPLoadImage] _read_meta_paths: meta json NOT FOUND at '{meta_path}'")
@@ -223,10 +215,6 @@ class RGBYPLoadImage:
         mask_path = resolve("mask")
         composite_path = resolve("composite")
 
-        print(
-            "[RGBYPLoadImage] _read_meta_paths: "
-            f"original='{original_path}', mask='{mask_path}', composite='{composite_path}'"
-        )
 
         return temp_dir, meta_path, original_path, mask_path, composite_path
 
@@ -298,10 +286,6 @@ class RGBYPLoadImage:
     # translated comment
     # ------------------------------------------------------------------
     def load_image(self, image, updater=0.0, unique_id=None):
-        print(
-            f"[RGBYPLoadImage] load_image: image='{image}', "
-            f"updater={updater}, unique_id='{unique_id}'"
-        )
 
         # 1. Load the image LoadImage
         base_loader = nodes.LoadImage()
@@ -312,11 +296,6 @@ class RGBYPLoadImage:
         dir_path, file_name_ext = os.path.split(abs_path)
         imageOriginalName, _ = os.path.splitext(file_name_ext)
 
-        print(
-            "[RGBYPLoadImage] load_image: "
-            f"abs_path='{abs_path}', dir_path='{dir_path}', "
-            f"file_name_ext='{file_name_ext}', imageOriginalName='{imageOriginalName}'"
-        )
 
         # 1.1 Create variable outputMask = None
         outputMask = None
@@ -338,10 +317,6 @@ class RGBYPLoadImage:
             jsonFileName = None
             json_path = None
 
-        print(
-            "[RGBYPLoadImage] load_image: "
-            f"temp_dir='{temp_dir}', jsonFileName='{jsonFileName}', json_path='{json_path}'"
-        )
 
         # 1.3 Save the full path of the selected image into the variable filePath
         # 1.3 Save the full path of the selected image into the variable filePath
@@ -355,13 +330,9 @@ class RGBYPLoadImage:
         # 1.4 Save the image filename without extension into the variable fileName
         fileName = imageOriginalName
 
-        print(
-            f"[RGBYPLoadImage] getSubfolderName('{file_name_ext}') -> '{subfolder_path}'"
-        )
 
         # 2. Check if exists in temp json jsonFileName
         if json_path is not None and os.path.isfile(json_path):
-            print(f"[RGBYPLoadImage] load_image: json exists at '{json_path}'")
             try:
                 with open(json_path, "r", encoding="utf-8") as f:
                     meta = json.load(f)
@@ -372,19 +343,11 @@ class RGBYPLoadImage:
                 meta = {}
 
             mask_rel = str(meta.get("mask") or "").strip()
-            print(
-                "[RGBYPLoadImage] load_image: "
-                f"json mask field='{mask_rel}'"
-            )
 
             # IF FIELD mask is not empty
             if mask_rel:
                 mask_path = (
                     mask_rel if os.path.isabs(mask_rel) else os.path.join(temp_dir, mask_rel)
-                )
-                print(
-                    "[RGBYPLoadImage] load_image: "
-                    f"resolved mask_path='{mask_path}'"
                 )
 
                 if os.path.isfile(mask_path):
@@ -425,10 +388,6 @@ class RGBYPLoadImage:
         if outputMask is None:
             outputMask = self._make_black_64(base_image)
 
-        print(
-            "[RGBYPLoadImage] load_image: done, returning base_image, outputMask, "
-            "base_mask, filePath, fileName"
-        )
         return (
             base_image,
             outputMask,

@@ -29,7 +29,7 @@ class RGBYPMaskCompositeWithStrength:
     @classmethod
     def INPUT_TYPES(cls):
         float_cfg = {
-            "min": 0.05,
+            "min": 0.00,
             "max": 1.0,
             "step": 0.05,
             "default": 0.50,
