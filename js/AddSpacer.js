@@ -4,51 +4,71 @@
 import { app } from "../../../scripts/app.js";
 
 
-const TARGET_NODES = [
-    "RGBYPSaveMask",
-    "RGBYPMaskStrength",
-    "RGBYPMaskCompositeWithStrength",
-    // "RGBYPMaskToList",
-];
+// const TARGET_NODES = [
+//     "RGBYPSaveMask",
+//     "RGBYPMaskStrength",
+//     "RGBYPMaskCompositeWithStrength",
+//     // "RGBYPMaskToList",
+// ];
 
-function addSpacerWidget(nodeName, beforeWidgetName, seze = 20) {
+function isSerializableWidget(w) {
+    if (!w) return false;
+    if (w.options && w.options.serialize === false) return false;
+    if (w.serialize === false) return false;
+    return true;
+}
+
+// Adds vertical gap BEFORE a widget WITHOUT inserting a new widget (so widgets_values indexing stays intact).
+function addSpacerBeforeWidget(nodeName, beforeWidgetName, size = 20) {
     app.registerExtension({
-        name: `AK.AddSpacer.${nodeName}.${beforeWidgetName}`,
+        name: `AK.AddSpacerNoWidget.${nodeName}.${beforeWidgetName}`,
         nodeCreated(node) {
             if (node.comfyClass !== nodeName) return;
 
-            const insertSpacer = () => {
-                if (node.__ak_spacer_added) return;
-                node.__ak_spacer_added = true;
-
-                const spacer = node.addWidget("custom", "", "", () => { });
-                spacer.serialize = false;
-                spacer.computeSize = () => [1, seze];
-
+            const apply = () => {
                 const widgets = node.widgets || [];
-                const targetIndex = widgets.findIndex(w => w.name === beforeWidgetName);
+                const idx = widgets.findIndex(w => w?.name === beforeWidgetName);
+                if (idx <= 0) return; // can't add "before" first widget safely this way
 
-                widgets.splice(widgets.indexOf(spacer), 1);
+                // Find the closest previous widget we can safely expand
+                let prevIdx = idx - 1;
+                while (prevIdx >= 0 && !isSerializableWidget(widgets[prevIdx])) prevIdx--;
+                if (prevIdx < 0) return;
 
-                if (targetIndex !== -1) {
-                    widgets.splice(targetIndex, 0, spacer);
-                } else {
-                    widgets.push(spacer);
+                const prev = widgets[prevIdx];
+                const key = `__ak_spacer_before__${beforeWidgetName}`;
+
+                if (prev[key]) return;
+                prev[key] = true;
+
+                const origCompute = prev.computeSize;
+                prev.computeSize = function (...args) {
+                    const base = origCompute ? origCompute.apply(this, args) : [0, 20];
+                    const w = Array.isArray(base) ? (base[0] ?? 0) : 0;
+                    const h = Array.isArray(base) ? (base[1] ?? 20) : 20;
+                    return [w, h + size];
+                };
+
+                // Ensure node is tall enough (LiteGraph will often auto-expand, but not always)
+                // We don't know exact delta, so add a small buffer once.
+                if (!node.__ak_spacer_size_bump) {
+                    node.__ak_spacer_size_bump = 1;
+                    node.size[1] = Math.max(node.size[1], node.size[1] + size);
                 }
             };
 
+            // Run once now (for manual creation) and again after configure (for workflow load)
+            apply();
             const origOnConfigure = node.onConfigure;
             node.onConfigure = function () {
                 if (origOnConfigure) origOnConfigure.apply(this, arguments);
-                insertSpacer();
+                apply();
             };
-
-            queueMicrotask(insertSpacer);
         },
     });
 }
 
 // examples
-addSpacerWidget("RGBYPSaveMask", "add_postfix", 20);
-addSpacerWidget("RGBYPMaskStrength", "combined_strength", 20);
-addSpacerWidget("RGBYPMaskCompositeWithStrength", "invert", 20);
+addSpacerBeforeWidget("RGBYPSaveMask", "add_postfix", 20);
+addSpacerBeforeWidget("RGBYPMaskStrength", "combined_strength", 20);
+addSpacerBeforeWidget("RGBYPMaskCompositeWithStrength", "invert", 20);
