@@ -2,6 +2,7 @@
 import torch
 import numpy as np
 from PIL import Image, ImageFilter
+import scipy.ndimage
 
 class MaskGrowBlur:
     @classmethod
@@ -60,8 +61,16 @@ class MaskGrowBlur:
             pil = Image.fromarray(img, mode="L")
 
             if gs > 0:
-                k = gs * 2 + 1
-                pil = pil.filter(ImageFilter.MaxFilter(size=k))
+                # Match ComfyUI GrowMask: repeated 3x3 grey_dilation with tapered_corners=True
+                kernel = np.array([[0, 1, 0],
+                                   [1, 1, 1],
+                                   [0, 1, 0]], dtype=np.uint8)
+                out_f = arr
+                for _ in range(gs):
+                    out_f = scipy.ndimage.grey_dilation(out_f, footprint=kernel)
+                arr = np.clip(out_f, 0.0, 1.0)
+                img = (arr * 255.0 + 0.5).astype(np.uint8)
+                pil = Image.fromarray(img, mode="L")
 
             if bs > 0:
                 pil = pil.filter(ImageFilter.GaussianBlur(radius=bs))
