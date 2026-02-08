@@ -1,6 +1,5 @@
+import { api } from "../../scripts/api.js";
 import { app } from "../../scripts/app.js";
-
-import { uploadFile, loadImage, updateWidgetValue, getWidgetValue, getWidgetJSON, getImageWidgetFileAndFolder } from "./AKGeneralUtils.js";
 
 import { GP } from "./RGBYPMaskEditor.js";
 import { getNodeState } from "./RGBYPMaskEditor.js";
@@ -15,28 +14,6 @@ function loadImageFromUrl(url) {
         };
         img.src = url;
     });
-}
-
-function waitForImage(img) {
-    return new Promise((resolve, reject) => {
-        if (!img) return reject(new Error("[RGBYP] waitForImage: no image"));
-        if (img.complete && img.naturalWidth > 0) return resolve(img);
-        img.onload = () => resolve(img);
-        img.onerror = (e) => reject(e);
-    });
-}
-
-function withCacheBust(url) {
-    const sep = url.includes("?") ? "&" : "?";
-    return `${url}${sep}_t=${Date.now()}`;
-}
-
-async function loadClipspaceImage(nameOnly) {
-    const img = await loadImage(nameOnly, "input", "clipspace");
-    try {
-        img.src = withCacheBust(img.src);
-    } catch (_) { }
-    return await waitForImage(img);
 }
 
 function safeBaseNameFromPath(filename) {
@@ -63,6 +40,96 @@ function parseRgbypFilename(filename) {
     };
 }
 
+function viewUrlForInputClipspace(nameOnly) {
+    return `/view?filename=${encodeURIComponent(nameOnly)}&subfolder=clipspace&type=input&_t=${Date.now()}`;
+}
+
+function getNodeWidgetByName(node, name) {
+    if (!node || !Array.isArray(node.widgets)) return null;
+    return node.widgets.find((w) => w && w.name === name) || null;
+}
+
+function getNodeImageWidget(node) {
+    if (!node || !Array.isArray(node.widgets)) return null;
+    return node.widgets.find(
+        (w) => w && (w.name === "image" || w.type === "image" || w.widgetType === "image")
+    ) || null;
+}
+
+function setNodeImageWidgetValue(node, value) {
+    const imageWidget = getNodeImageWidget(node);
+    if (!imageWidget) return;
+
+    imageWidget.value = value;
+    try {
+        if (typeof imageWidget.callback === "function") {
+            imageWidget.callback(imageWidget.value, app, node, imageWidget);
+        }
+    } catch (e) {
+        console.warn("[RGBYP] image widget callback error", e);
+    }
+}
+
+function setNodeWidgetValue(node, widgetName, value) {
+    const w = getNodeWidgetByName(node, widgetName);
+    if (!w) return false;
+
+    w.value = value;
+    try {
+        if (typeof w.callback === "function") {
+            w.callback(w.value, app, node, w);
+        }
+    } catch (e) {
+        console.warn("[RGBYP] widget callback error", widgetName, e);
+    }
+    return true;
+}
+
+function getNodeImageFilename(node) {
+    let src = null;
+
+    if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0 && node.imgs[0]?.src) {
+        src = node.imgs[0].src;
+    } else if (node.image instanceof Image && node.image.src) {
+        src = node.image.src;
+    }
+
+    if (!src) return null;
+
+    try {
+        const url = new URL(src, window.location.origin);
+        const fromParam = url.searchParams.get("filename");
+        if (fromParam) return fromParam;
+        const pathParts = url.pathname.split("/");
+        return pathParts[pathParts.length - 1] || null;
+    } catch (e) {
+        const idx = src.indexOf("filename=");
+        if (idx >= 0) {
+            const rest = src.slice(idx + "filename=".length);
+            const amp = rest.indexOf("&");
+            return amp >= 0 ? rest.slice(0, amp) : rest;
+        }
+        return null;
+    }
+}
+
+function readRgbypJsonFromNode(node) {
+    const w = getNodeWidgetByName(node, "rgbyp_json");
+    if (!w) return null;
+
+    const raw = (w.value ?? "").toString().trim();
+    if (!raw) return null;
+
+    try {
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj !== "object") return null;
+        if (!obj.original || !obj.composite) return null;
+        return obj;
+    } catch (_) {
+        return null;
+    }
+}
+
 function buildNamesFromOriginal(originalName, nodeId) {
     const info = parseRgbypFilename(originalName);
     if (!info) return null;
@@ -79,10 +146,50 @@ function buildNamesFromOriginal(originalName, nodeId) {
     };
 }
 
-function canvasToBlob(canvas, mime = "image/png", quality) {
-    return new Promise((resolve) => {
-        canvas.toBlob((b) => resolve(b), mime, quality);
-    });
+async function uploadComfyFile(file, type = "input", subfolder = "clipspace") {
+    const form = new FormData();
+    form.append("image", file);
+    form.append("type", type);
+    if (subfolder) form.append("subfolder", subfolder);
+    form.append("overwrite", "true");
+
+    try {
+        const resp = await api.fetchApi("/upload/image", {
+            method: "POST",
+            body: form,
+        });
+
+        const text = await resp.text();
+        let info = null;
+        try {
+            info = JSON.parse(text);
+        } catch {
+            info = text;
+        }
+
+        if (!resp.ok) {
+            console.warn("[RGBYP] uploadComfyFile FAILED", file.name, resp.status, info);
+            return null;
+        }
+
+        return info;
+    } catch (err) {
+        console.error("[RGBYP] uploadComfyFile error:", err);
+        return null;
+    }
+}
+
+export function dataURLtoFile(dataUrl, filename) {
+    const arr = dataUrl.split(",");
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/png";
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
 }
 
 export function initBaseImageAndCanvas() {
@@ -107,22 +214,22 @@ export function initBaseImageAndCanvas() {
     }
 
     (async () => {
-        const rgbypJson = getWidgetJSON(node, "rgbyp_json");
+        const rgbypJson = readRgbypJsonFromNode(node);
 
         let baseImg = null;
         let maskImg = null;
 
         if (rgbypJson) {
             try {
-                baseImg = await loadClipspaceImage(rgbypJson.original);
-            } catch (_) {
+                baseImg = await loadImageFromUrl(viewUrlForInputClipspace(rgbypJson.original));
+            } catch (e) {
                 baseImg = null;
             }
 
             if (rgbypJson.mask) {
                 try {
-                    maskImg = await loadClipspaceImage(rgbypJson.mask);
-                } catch (_) {
+                    maskImg = await loadImageFromUrl(viewUrlForInputClipspace(rgbypJson.mask));
+                } catch (e) {
                     maskImg = null;
                 }
             }
@@ -138,7 +245,7 @@ export function initBaseImageAndCanvas() {
 
         if (!baseImg) {
             try {
-                baseImg = await loadImageFromUrl(withCacheBust(fallbackSrc));
+                baseImg = await loadImageFromUrl(fallbackSrc);
             } catch (e) {
                 console.error("[RGBYP] Failed to load image from node src", fallbackSrc, e);
                 return;
@@ -196,10 +303,6 @@ export function initBaseImageAndCanvas() {
 
 export async function saveMask() {
     const node = GP.baseNode;
-
-    const nodeType = (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
-    const isBridgeNode = nodeType === "RGBYPMaskBridge";
-
     if (!node) {
         console.warn("[RGBYP] saveMask: no GP.baseNode");
         return;
@@ -226,11 +329,7 @@ export async function saveMask() {
     let names = state.rgbypNames || null;
 
     if (!names) {
-        const tempName = `RGBYPBridge-rgbyp-original-${node.id}${ext}`;
-        console.log("[RGBYP] tempName:", tempName);
-        const graphImagePath = getImageWidgetFileAndFolder(node, "image");
-        const rgbypJson = getWidgetJSON(node, "rgbyp_json");
-        const graphImageFilename = graphImagePath ? graphImagePath.fullPath : tempName;
+        const graphImageFilename = getNodeImageFilename(node) || "";
         const rgbypInfo = graphImageFilename && graphImageFilename.includes("-rgbyp-")
             ? parseRgbypFilename(graphImageFilename)
             : null;
@@ -265,17 +364,15 @@ export async function saveMask() {
         const tctx = tmpCanvas.getContext("2d");
         tctx.drawImage(baseImg, 0, 0);
 
-        const blob = await canvasToBlob(tmpCanvas, "image/png");
-        if (blob) {
-            await uploadFile(blob, originalName, "input", "clipspace");
-        }
+        const originalDataUrl = tmpCanvas.toDataURL("image/png");
+        const originalFile = dataURLtoFile(originalDataUrl, originalName);
+        await uploadComfyFile(originalFile, "input", "clipspace");
     }
 
     {
-        const blob = await canvasToBlob(maskCanvas, "image/png");
-        if (blob) {
-            await uploadFile(blob, maskName, "input", "clipspace");
-        }
+        const maskDataUrl = maskCanvas.toDataURL("image/png");
+        const maskFile = dataURLtoFile(maskDataUrl, maskName);
+        await uploadComfyFile(maskFile, "input", "clipspace");
     }
 
     {
@@ -298,10 +395,9 @@ export async function saveMask() {
         cctx.drawImage(maskCanvas, 0, 0, w, h);
         cctx.globalAlpha = 1;
 
-        const blob = await canvasToBlob(compCanvas, "image/png");
-        if (blob) {
-            await uploadFile(blob, compositeName, "input", "clipspace");
-        }
+        const compositeDataUrl = compCanvas.toDataURL("image/png");
+        const compositeFile = dataURLtoFile(compositeDataUrl, compositeName);
+        await uploadComfyFile(compositeFile, "input", "clipspace");
     }
 
     const jsonObj = {
@@ -310,22 +406,23 @@ export async function saveMask() {
         mask: maskName,
         composite: compositeName,
     };
+    setNodeWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj));
 
-    node.__rgbyp_skip_clear_json_once = true;
-    updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
+    const widgetValue = `clipspace/${compositeName}`;
+    setNodeImageWidgetValue(node, widgetValue);
 
-    if (!isBridgeNode) {
-        const widgetValue = `clipspace/${compositeName}`;
-        updateWidgetValue(node, "image", widgetValue, true);
-    } else {
-        try {
-            const img = await loadImage(compositeName, "input", "clipspace");
-            node.img = img;
-            node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
-            // node.graph?.setDirtyCanvas(true, true);
-        } catch (e) {
-            console.warn("[RGBYP] saveMask: failed to update node preview", e);
+    try {
+        const img = await loadImageFromUrl(viewUrlForInputClipspace(compositeName));
+        node.img = img;
+        if (Array.isArray(node.imgs)) {
+            node.imgs[0] = img;
+        } else {
+            node.imgs = [img];
         }
+        if (app && app.graph) {
+            app.graph.setDirtyCanvas(true, true);
+        }
+    } catch (e) {
+        console.warn("[RGBYP] saveMask: failed to update node preview", e);
     }
-
 }

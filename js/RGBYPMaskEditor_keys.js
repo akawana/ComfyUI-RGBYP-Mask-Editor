@@ -1,9 +1,6 @@
 import { GP, getNodeState, cleanupEditorState } from "./RGBYPMaskEditor.js";
 import { colorListRGB, updateToolButtonsHighlight, updateSelectedColorUI } from "./RGBYPMaskEditor_ui.js";
-import { saveMask, updatePreview } from "./RGBYPMaskEditor_io.js";
-
-
-
+import { saveMask } from "./RGBYPMaskEditor_io.js";
 
 async function copyMaskToClipboard() {
     const state = getNodeState(GP.baseNode.id);
@@ -23,7 +20,6 @@ if (ctx) {
     }
     if (!hasAlpha) return;
 }
-
 
     try {
         if (navigator.clipboard && window.ClipboardItem) {
@@ -136,7 +132,6 @@ async function onKeyDownStub(e) {
         }
     }
 
-
     // Space  : temporary pan
     
     if (e.code === "Space") {
@@ -158,11 +153,9 @@ async function onKeyDownStub(e) {
         if (!panel) return;
         const rect = panel.getBoundingClientRect();
 
-        
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        
         applyZoomAt(state, cx, cy, +100);
 
         e.preventDefault();
@@ -180,14 +173,12 @@ async function onKeyDownStub(e) {
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
 
-        
         applyZoomAt(state, cx, cy, -100);
 
         e.preventDefault();
         return;
     }
 
-    
     if (e.code === "KeyV" && e.shiftKey) {
         if (!state) return;
 
@@ -202,7 +193,6 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    
     if (e.key === "Escape") {
         // console.log("[RGBYP] ESC pressed: closing dialog without saving");
         closeEditor();
@@ -210,12 +200,11 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    
     if (e.key === "Enter") {
         try {
             
             await saveMask();
-            updatePreview();
+            
         } catch (err) {
             console.error("[RGBYP] saveMask error on Enter:", err);
         }
@@ -243,7 +232,6 @@ async function onKeyDownStub(e) {
         return;
     }
 
-    
     if (e.code === "KeyD" && e.shiftKey) {
         adjustBrushSizeByStep(1);
         e.preventDefault();
@@ -284,19 +272,16 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     const prevCssH = parseFloat(container.style.height) || rect.height;
     if (!prevCssW || !prevCssH) return;
 
-    
     const xOnCanvas = centerClientX - rect.left;
     const yOnCanvas = centerClientY - rect.top;
     const relX = xOnCanvas / prevCssW;
     const relY = yOnCanvas / prevCssH;
 
-    
     if (!state.zoomPrevWidth || !state.zoomPrevHeight) {
         state.zoomPrevWidth = prevCssW;
         state.zoomPrevHeight = prevCssH;
     }
 
-    
     const factor = deltaY < 0 ? 1.1 : 1 / 1.1;
 
     const oldZoom = state.zoom || 1;
@@ -323,19 +308,15 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     panel.scrollLeft += dx;
     panel.scrollTop += dy;
 
-    
-    
     if (cursorEvent) {
         updateBrushCursor(cursorEvent);
     }
 }
 
-
 function onWheelZoom(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state) return;
 
-    
     e.preventDefault();
 
     applyZoomAt(state, e.clientX, e.clientY, e.deltaY, e);
@@ -364,7 +345,6 @@ function getCanvasCoords(e, canvas) {
     return { x, y };
 }
 
-
 function onMaskMouseDown(e) {
     const state = getNodeState(GP.baseNode.id);
     if (state.currentTool === "Scroll") {
@@ -372,8 +352,6 @@ function onMaskMouseDown(e) {
         return;
     }
 
-    
-    
     if (state.currentTool === "Erase") {
         state.drawMode = "Erase";
     } else {
@@ -384,7 +362,6 @@ function onMaskMouseDown(e) {
     const canvas = state.maskCanvas;
     if (!canvas) return;
 
-    
     if (e.button !== 0 && e.button !== 2) return;
 
     e.preventDefault();
@@ -397,7 +374,6 @@ function onMaskMouseDown(e) {
 
     const ctx = canvas.getContext("2d");
 
-    
     if (state.drawMode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
         ctx.strokeStyle = "rgba(0,0,0,1)";
@@ -420,7 +396,6 @@ function onMaskMouseDown(e) {
     onMaskDraw(e);
 }
 
-
 function onMaskDraw(e) {
     const state = getNodeState(GP.baseNode.id);
     const canvas = state.maskCanvas;
@@ -441,8 +416,6 @@ function onMaskDraw(e) {
     const ctx = canvas.getContext("2d");
 
     const mode = state.drawMode || "Paint";
-
-    
 
     if (mode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
@@ -466,7 +439,6 @@ function onMaskDraw(e) {
     state.drawLastY = y;
 }
 
-
 function onMaskMouseUp(e) {
     const state = getNodeState(GP.baseNode.id);
     const canvas = state.maskCanvas;
@@ -489,7 +461,6 @@ function onMaskContextMenu(e) {
     
     e.preventDefault();
 }
-
 
 // ----------------- OPACITY -----------------
 
@@ -527,8 +498,6 @@ function adjustMaskOpacityByStep(direction) {
     }
 }
 
-
-
 function clampBrushSize(size) {
     return Math.max(1, Math.min(size, 400));
 }
@@ -548,13 +517,11 @@ function adjustBrushSizeByStep(direction) {
 
     state.brushSize = size;
 
-    
     if (state.brushSlider) {
         state.brushSlider.value = String(size);
         state.brushSlider.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
-    
     if (state.lastCursorClientX != null) {
         updateBrushCursor({
             clientX: state.lastCursorClientX,
@@ -562,7 +529,6 @@ function adjustBrushSizeByStep(direction) {
         });
     }
 }
-
 
 function getBrushSizePx(state) {
     const brushSize = clampBrushSize(state.brushSize ?? 50);
@@ -586,7 +552,6 @@ function updateBrushCursor(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    
     state.lastCursorClientX = e.clientX;
     state.lastCursorClientY = e.clientY;
 
@@ -655,7 +620,6 @@ function onPanMouseDown(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !state.centralPanel) return;
 
-    
     if (state.currentTool !== "Scroll") return;
     if (e.button !== 0) return;
 
@@ -698,11 +662,9 @@ function applyAutoMask(state, modeIndex) {
     const h = canvas.height;
     if (!w || !h) return;
 
-    
     ctx.clearRect(0, 0, w, h);
     ctx.globalCompositeOperation = "source-over";
 
-    
     const RED = "rgba(255,0,0,1)";
     const GREEN = "rgba(0,255,0,1)";
     const BLUE = "rgba(0,0,255,1)";
@@ -740,17 +702,13 @@ function applyAutoMask(state, modeIndex) {
     }
 }
 
-
-
 export function registerKeyHandlers(scopeElement) {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !scopeElement) return;
 
-    
     window.addEventListener("keydown", onKeyDownStub);
     window.addEventListener("keyup", onKeyUpStub);
 
-    
     const panel = state.centralPanel;
     if (panel) {
         panel.onwheel = (e) => onWheelZoom(e);     // zoom
@@ -760,7 +718,6 @@ export function registerKeyHandlers(scopeElement) {
         panel.onmouseleave = onPanMouseUp;
     }
 
-    
     const mask = state.maskCanvas;
     if (mask) {
         mask.onmousedown = onMaskMouseDown;
@@ -771,7 +728,6 @@ export function registerKeyHandlers(scopeElement) {
         mask.oncontextmenu = onMaskContextMenu;
     }
 
-    
     const cont = state.canvasContainer;
     if (cont) {
         cont.onmousemove = onBrushCursorMove;
@@ -780,7 +736,6 @@ export function registerKeyHandlers(scopeElement) {
         cont.style.cursor = "none";
     }
 
-    
     const sliders = scopeElement.querySelectorAll('input[type="range"]');
 
     // Brush size
@@ -788,7 +743,6 @@ export function registerKeyHandlers(scopeElement) {
         const brushSlider = sliders[0];
         state.brushSlider = brushSlider;
 
-        
         if (state.brushSize == null) {
             state.brushSize = clampBrushSize(parseInt(brushSlider.value) || 50);
         } else {
@@ -839,7 +793,6 @@ export function registerKeyHandlers(scopeElement) {
         };
     }
 
-    
     if (state.helpIcon && state.helpPanel) {
         state.helpIcon.onclick = () => {
             state.helpPanel.style.display = "flex";
@@ -851,7 +804,6 @@ export function registerKeyHandlers(scopeElement) {
             state.helpPanel.style.display = "none";
         };
     }
-
 
     // --- TOOL BUTTONS (Brush / Eraser / Scroll / Clear) ---
     const brushBtn = scopeElement.querySelector('button[data-tool="Brush"]');
@@ -869,13 +821,11 @@ export function registerKeyHandlers(scopeElement) {
     if (scrollBtn) scrollBtn.onclick = onToolButtonClick;
     if (clearBtn) clearBtn.onclick = onToolButtonClick;
 
-    
     if (!state.currentTool) {
         state.currentTool = "Brush";
     }
     updateToolButtonsHighlight(state.currentTool);
 
-    
     if (state.colorButtons && Array.isArray(state.colorButtons)) {
         state.colorButtons.forEach((btn, idx) => {
             btn.onclick = () => {
@@ -941,14 +891,13 @@ export function registerKeyHandlers(scopeElement) {
 
             try {
                 await saveMask();
-                updatePreview();
+                
             } catch (err) {
                 console.error("[RGBYP] saveMask error on button click:", err);
             }
             closeEditor();
         };
     }
-
 
 const copyMaskBtn = scopeElement.querySelector('button[data-tool="Copy Mask"]');
 if (copyMaskBtn) {
@@ -974,7 +923,5 @@ export function unregisterKeyHandlers(scopeElement) {
     window.removeEventListener("keydown", onKeyDownStub);
     window.removeEventListener("keyup", onKeyUpStub);
 
-    
-    
 }
 

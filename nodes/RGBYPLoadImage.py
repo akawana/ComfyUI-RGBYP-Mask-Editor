@@ -1,114 +1,57 @@
 import os
 import json
-import numpy as np
-import torch
-from PIL import Image
 
 import nodes
 import folder_paths
+import torch
 
-# print = lambda *a, **k: None  # Disable print statements for cleaner output
+try:
+    from .RGBYPUtils import (
+        _load_image_from_path,
+        _make_black_mask_64,
+        _make_black_64,
+        _rgbyp_mask_to_regular_mask,
+    )
+except Exception:
+    from RGBYPUtils import (
+        _load_image_from_path,
+        _make_black_mask_64,
+        _make_black_64,
+        _rgbyp_mask_to_regular_mask,
+    )
 
-def getSubfolderName(fileName: str) -> str:
-    """
-    Searches for a file with the given name inside subfolders of ComfyUI/input.
-    Root input directory is ignored.
 
-    Returns:
-        '/subfolder1/subfolder2' if found
-        '' if not found
-    """
-    if not fileName:
+def _clipspace_abs(filename: str) -> str:
+    if not filename:
         return ""
+    filename = os.path.basename(filename.replace("\\", "/"))
+    return os.path.join(folder_paths.get_input_directory(), "clipspace", filename)
 
-    input_dir = folder_paths.get_input_directory()
-    target = fileName.lower()
 
-    for root, dirs, files in os.walk(input_dir):
-        # Skip root input directory itself
-        if os.path.abspath(root) == os.path.abspath(input_dir):
-            continue
-
-        for fn in files:
-            if fn.lower() == target:
-                rel_dir = os.path.relpath(root, input_dir)
-                return f"\\{rel_dir}\\"
-
-    return ""
-
+def _safe_json_loads(s: str):
+    if not isinstance(s, str):
+        return None
+    s = s.strip()
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except Exception:
+        return None
 
 
 class RGBYPLoadImage:
-    """
-    Extended version of the standard Load Image node, working together with the RGBYP editor.
-
-    LOGIC:
-
-    1. The JS preview node may alter the filename by adding a suffix:
-         "_<some_id>__rgbyp"
-       For example:
-         original file:   iii_2.png
-         preview file:    iii_2_108__rgbyp.png
-
-       We need to restore the base name "iii_2" and ignore this suffix.
-
-    2. meta.json is ALWAYS named as:
-         <clean_name_WITHOUT_EXTENSION>_<unique_id>_meta.json
-
-       Example:
-         base name:   iii_2
-         unique_id:   108
-         meta.json:   iii_2_108_meta.json   (stored in temp)
-
-    3. meta.json contains the following fields:
-         {
-             "original": "<path or filename of the original image>",
-             "mask": "<path or filename of the mask image>",
-             "composite": "<path or filename of the baked composite image>",
-             ...
-         }
-
-       Values may be:
-         - absolute paths
-         - or filenames in temp (relative to temp)
-
-    4. Node outputs:
-
-       - image (IMAGE):
-            taken from meta["original"] (image from temp).
-            If meta.json is missing or original is missing/fails to load —
-            the standard LoadImage result (the original image) is used.
-
-       - rgbyp_mask (IMAGE):
-            taken from meta["mask"] (image from temp).
-            If meta.json is missing or mask is missing/empty/fails to load —
-            a black 64×64 image is returned.
-
-       - mask (MASK):
-            the standard mask from LoadImage.
-
-       - file_path (STRING):
-            absolute path to the source image (same as standard LoadImage).
-
-       - file_name (STRING):
-            the raw original filename without extension (before any cleanup).
-    """
-
     @classmethod
     def INPUT_TYPES(cls):
         base = nodes.LoadImage.INPUT_TYPES()
 
         required = dict(base.get("required", {}))
-        required["updater"] = (
-            "FLOAT",
-            {
-                "default": 0.7500,
-                "min": 0.0001,
-                "max": 1.0000,
-                "step": 0.0001,
-            },
-        )
         base["required"] = required
+
+
+        required["rgbyp_json"] = ("STRING", {"default": "", "multiline": True})
+        optional = dict(base.get("optional", {}))
+        base["optional"] = optional
 
         hidden = dict(base.get("hidden", {}))
         hidden["unique_id"] = "UNIQUE_ID"
@@ -116,7 +59,7 @@ class RGBYPLoadImage:
 
         return base
 
-    DESCRIPTION = "Loads an image, outputs RGBYP mask, and outputs helper file name and path."
+    DESCRIPTION = "Loads an image and (optionally) loads RGBYP files from JSON."
     CATEGORY = "AK/RGBYP"
 
     RETURN_TYPES = ("IMAGE", "IMAGE", "MASK", "STRING", "STRING")
@@ -131,282 +74,53 @@ class RGBYPLoadImage:
     OUTPUT_NODE = False
     FUNCTION = "load_image"
 
-    # ------------------------------------------------------------------
-    # HELPER FUNCTIONS
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _normalize_base_name(raw_name: str) -> str:
-        """
-        Converts a name like 'iii_2_108__rgbyp' back into the base name 'iii_2'.
-
-        Rules:
-        1) If the name ends with the suffix '__rgbyp' — remove it.
-        2) After that, if the remaining name ends with '_<digits>' — remove that too
-           (this is the ID added by the JS preview logic).
-
-        Examples:
-          'iii_2_108__rgbyp' -> 'iii_2'
-          'iii_2_999__rgbyp' -> 'iii_2'
-          'iii_2'            -> 'iii_2'
-        """
-        if not raw_name:
-            return raw_name
-
-        base = raw_name
-
-        # 1. Remove the "__rgbyp" suffix
-        preview_suffix = "__rgbyp"
-        if base.endswith(preview_suffix):
-            base = base[: -len(preview_suffix)]
-
-        # 2. Remove the trailing "_<digits>" if present
-        idx = base.rfind("_")
-        if idx != -1:
-            tail = base[idx + 1 :]
-            if tail.isdigit():
-                base = base[:idx]
-
-        return base
-
-    def _read_meta_paths(self, base_name, unique_id):
-        """
-        Searches for meta.json in temp:
-
-            <base_name>_<unique_id>_meta.json
-
-        where base_name is the cleaned base name of the image (without .png and without JS suffixes).
-
-        Returns:
-            (temp_dir, meta_path, original_path, mask_path, composite_path)
-            - *_path may be None if they do not exist or if meta.json is missing.
-        """
-        temp_dir = folder_paths.get_temp_directory()
-        os.makedirs(temp_dir, exist_ok=True)
-
-
-        if not base_name or not unique_id:
-            print("[RGBYPLoadImage] _read_meta_paths: base_name or unique_id is empty -> no meta.json")
-            return temp_dir, None, None, None, None
-
-        # translated comment
-        meta_filename = f"{base_name}_{unique_id}_meta.json"
-        meta_path = os.path.join(temp_dir, meta_filename)
-
-
-        if not os.path.isfile(meta_path):
-            print(f"[RGBYPLoadImage] _read_meta_paths: meta json NOT FOUND at '{meta_path}'")
-            return temp_dir, meta_path, None, None, None
-
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-        except Exception as e:
-            print(f"[RGBYPLoadImage] error reading meta json '{meta_path}': {e}")
-            return temp_dir, meta_path, None, None, None
-
-        def resolve(key):
-            val = str(meta.get(key) or "").strip()
-            if not val:
-                return None
-            return val if os.path.isabs(val) else os.path.join(temp_dir, val)
-
-        original_path = resolve("original")
-        mask_path = resolve("mask")
-        composite_path = resolve("composite")
-
-
-        return temp_dir, meta_path, original_path, mask_path, composite_path
-
-    def _load_image_from_path(self, path, ref_tensor=None, label=""):
-        """
-        Loads an image file as an IMAGE tensor (1, H, W, C) in the [0,1] range.
-
-        Currently RGBA is used to preserve alpha (transparent mask background).
-        If the PNG has no alpha channel, it becomes standard RGB.
-
-        If ref_tensor is provided, device/dtype will match it,
-        and the size will be synchronized when possible.
-
-        label — a string used for logging (e.g. 'original' or 'mask').
-        """
-        if not path or not os.path.isfile(path):
-            print(
-                f"[RGBYPLoadImage] _load_image_from_path: {label} path is missing or not a file: '{path}'"
-            )
-            return None
-
-        print(f"[RGBYPLoadImage] _load_image_from_path: loading {label} from '{path}'")
-
-        try:
-            img = Image.open(path).convert("RGBA")
-
-            # translated comment
-            if ref_tensor is not None:
-                try:
-                    _, h, w, _ = ref_tensor.shape
-                    if img.size != (w, h):
-                        print(
-                            f"[RGBYPLoadImage] _load_image_from_path: "
-                            f"resizing {label} from {img.size} to ({w}, {h})"
-                        )
-                        img = img.resize((w, h), resample=Image.LANCZOS)
-                except Exception as e:
-                    print(
-                        "[RGBYPLoadImage] _load_image_from_path: "
-                        f"could not auto-resize {label} to ref_tensor shape: {e}"
-                    )
-
-            arr = np.array(img).astype(np.float32) / 255.0
-            tensor = torch.from_numpy(arr)[None, ...]  # (1,H,W,C)
-
-            if ref_tensor is not None:
-                tensor = tensor.to(device=ref_tensor.device, dtype=ref_tensor.dtype)
-
-            return tensor
-
-        except Exception as e:
-            print(f"[RGBYPLoadImage] error loading {label} image from '{path}': {e}")
-            return None
-
-    def _make_black_64(self, ref_tensor):
-        """
-        Creates a 64×64 black image (IMAGE) on the same device/dtype
-        as ref_tensor.
-        """
-        device = getattr(ref_tensor, "device", "cpu")
-        dtype = getattr(ref_tensor, "dtype", torch.float32)
-        print(
-            f"[RGBYPLoadImage] _make_black_64: creating black 64x64 image "
-            f"on device={device}, dtype={dtype}"
-        )
-        return torch.zeros((1, 64, 64, 3), device=device, dtype=dtype)
-
-    # ------------------------------------------------------------------
-    # translated comment
-    # ------------------------------------------------------------------
-    def load_image(self, image, updater=0.0, unique_id=None):
-
-        # 1. Load the image LoadImage
+    def load_image(self, image, rgbyp_json="", unique_id=None):
         base_loader = nodes.LoadImage()
-        base_image, base_mask = base_loader.load_image(image)
 
-        # 1. Take the input image name 
+        data = _safe_json_loads(rgbyp_json)
+        json_available = isinstance(data, dict) and isinstance(data.get("original"), str) and data.get("original")
+
+        if json_available:
+            original_fn = str(data.get("original") or "")
+            out_image, _ = base_loader.load_image(f"clipspace/{original_fn}")
+
+            mask_fn = str(data.get("mask") or "")
+            mask_abs = _clipspace_abs(mask_fn) if mask_fn else ""
+            # print("[RGBYP LoadImage] mask_fn =", mask_fn)
+            # print("[RGBYP LoadImage] mask_abs =", mask_abs)
+            # print("[RGBYP LoadImage] exists =", os.path.isfile(mask_abs))
+            rgbyp_mask = _load_image_from_path(mask_abs, ref_tensor=out_image)
+            if rgbyp_mask is None:
+                rgbyp_mask = _make_black_64(out_image.device, out_image.dtype)
+
+            # mask_tensor = _make_black_mask_64(out_image.device)
+            mask_tensor = _rgbyp_mask_to_regular_mask(rgbyp_mask)  # validate/correct the mask format
+            # if isinstance(rgbyp_mask, torch.Tensor) and rgbyp_mask.dim() == 4:
+            #     if rgbyp_mask.shape[-1] >= 4:
+            #         mask_tensor = rgbyp_mask[..., 3]  # alpha -> (1,H,W)
+            #     else:
+            #         mask_tensor = (rgbyp_mask[..., :3].mean(dim=-1) > 0).float()
+            #     mask_tensor = mask_tensor.to(device=out_image.device, dtype=torch.float32)
+            # else:
+            #     mask_tensor = _make_black_mask_64(out_image.device)            
+
+            file_path = ""
+            file_name = os.path.splitext(os.path.basename(original_fn.replace("\\", "/")))[0]
+            return (out_image, rgbyp_mask, mask_tensor, file_path, file_name)
+
+        out_image, _ = base_loader.load_image(image)
+        rgbyp_mask = _make_black_64(out_image.device, out_image.dtype)
+        mask_tensor = _make_black_mask_64(out_image.device)
+
         abs_path = folder_paths.get_annotated_filepath(image)
-        dir_path, file_name_ext = os.path.split(abs_path)
-        imageOriginalName, _ = os.path.splitext(file_name_ext)
+        file_path = os.path.dirname(abs_path) + "\\"
+        file_name = os.path.splitext(os.path.basename(abs_path))[0]
 
+        return (out_image, rgbyp_mask, mask_tensor, file_path, file_name)
 
-        # 1.1 Create variable outputMask = None
-        outputMask = None
-
-        # 1.2 Build json file name as rgbyp_idNode
-        temp_dir = folder_paths.get_temp_directory()
-        os.makedirs(temp_dir, exist_ok=True)
-
-        if unique_id is not None:
-            # remove extension from imageOriginalName
-            base_name = imageOriginalName
-            dot = base_name.rfind(".")
-            if dot > 0:
-                base_name = base_name[:dot]
-
-            jsonFileName = f"{base_name}_{unique_id}.json"
-            json_path = os.path.join(temp_dir, jsonFileName)
-        else:
-            jsonFileName = None
-            json_path = None
-
-
-        # 1.3 Save the full path of the selected image into the variable filePath
-        # 1.3 Save the full path of the selected image into the variable filePath
-        subfolder_path = getSubfolderName(file_name_ext)
-
-        if subfolder_path:
-            filePath = os.path.join(dir_path, subfolder_path.lstrip("\\"))
-        else:
-            filePath = dir_path + "\\"
-
-        # 1.4 Save the image filename without extension into the variable fileName
-        fileName = imageOriginalName
-
-
-        # 2. Check if exists in temp json jsonFileName
-        if json_path is not None and os.path.isfile(json_path):
-            try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            except Exception as e:
-                print(
-                    f"[RGBYPLoadImage] load_image: error reading json '{json_path}': {e}"
-                )
-                meta = {}
-
-            mask_rel = str(meta.get("mask") or "").strip()
-
-            # IF FIELD mask is not empty
-            if mask_rel:
-                mask_path = (
-                    mask_rel if os.path.isabs(mask_rel) else os.path.join(temp_dir, mask_rel)
-                )
-
-                if os.path.isfile(mask_path):
-                    # translated comment
-                    outputMask = self._load_image_from_path(
-                        mask_path, ref_tensor=base_image, label="rgbyp_mask"
-                    )
-                    if outputMask is None:
-                        print(
-                            "[RGBYPLoadImage] load_image: failed to load mask image, "
-                            "will fallback to black 64x64"
-                        )
-                else:
-                    print(
-                        "[RGBYPLoadImage] load_image: mask file does not exist, "
-                        "will fallback to black 64x64"
-                    )
-            else:
-                # IF FIELD not empty
-                print(
-                    "[RGBYPLoadImage] load_image: json mask field is empty, "
-                    "will use black 64x64 mask"
-                )
-        else:
-            # IF JSON DOES NOT EXIST
-            if json_path is not None:
-                print(
-                    "[RGBYPLoadImage] load_image: json not found at "
-                    f"'{json_path}', will use black 64x64 mask"
-                )
-            else:
-                print(
-                    "[RGBYPLoadImage] load_image: unique_id is None, "
-                    "skipping json lookup and using black 64x64 mask"
-                )
-
-        # translated comment
-        if outputMask is None:
-            outputMask = self._make_black_64(base_image)
-
-        return (
-            base_image,
-            outputMask,
-            base_mask,
-            filePath,
-            fileName,
-        )
-    # ------------------------------------------------------------------
-    # CHANGE DETECTION / VALIDATION
-    # ------------------------------------------------------------------
     @classmethod
-    def IS_CHANGED(cls, image, updater=0.0, **kwargs):
-        base_changed = nodes.LoadImage.IS_CHANGED(image)
-        try:
-            if base_changed is not None and not np.isnan(float(base_changed)):
-                return base_changed
-        except Exception:
-            pass
-        return float(updater or 0.0)
+    def IS_CHANGED(cls, image, **kwargs):
+        return nodes.LoadImage.IS_CHANGED(image)
 
     @classmethod
     def VALIDATE_INPUTS(cls, image, **kwargs):

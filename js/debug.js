@@ -1,4 +1,4 @@
-const AKXZ_DEBUG = false;
+const AKXZ_DEBUG = true;
 
 const ORIGINAL_LOG = console.log;
 
@@ -8,7 +8,9 @@ const SILENT_FILES = [
     "RGBYPMaskEditor.js",
     "RGBYPMaskEditor_io.js",
     "RGBYPMaskEditor_keys.js",
-    "RGBYPMaskEditor_ui.js"
+    "RGBYPMaskEditor_ui.js",
+    "RGBYPUtils.js",
+    "AKGeneralUtils.js"
 ];
 
 console.log = function (...args) {
