@@ -1,6 +1,6 @@
 import { GP, getNodeState, cleanupEditorState } from "./RGBYPMaskEditor.js";
 import { colorListRGB, updateToolButtonsHighlight, updateSelectedColorUI } from "./RGBYPMaskEditor_ui.js";
-import { saveMask } from "./RGBYPMaskEditor_io.js";
+import { fitImageToPanel, saveMask } from "./RGBYPMaskEditor_io.js";
 
 async function copyMaskToClipboard() {
     const state = getNodeState(GP.baseNode.id);
@@ -140,6 +140,9 @@ async function onKeyDownStub(e) {
             state.prevTool = state.currentTool || "Brush";
             state.currentTool = "Scroll";
             updateToolButtonsHighlight("Scroll");
+            if (state.canvasContainer) state.canvasContainer.style.cursor = "grab";
+            if (state.drawCursor) state.drawCursor.style.display = "none";
+
         }
         e.preventDefault();
         return;
@@ -214,7 +217,8 @@ async function onKeyDownStub(e) {
     }
     // Shift+C : reset zoom to initial
     if (e.code === "KeyC" && e.shiftKey) {
-        resetZoom();
+        fitImageToPanel(state);
+        // resetZoom();
         e.preventDefault();
         return;
     }
@@ -257,6 +261,8 @@ function onKeyUpStub(e) {
             state.spaceScrollActive = false;
             state.currentTool = state.prevTool || "Brush";
             updateToolButtonsHighlight(state.currentTool || "Brush");
+            if (state.canvasContainer) state.canvasContainer.style.cursor = "none";
+
         }
         e.preventDefault();
     }
@@ -331,23 +337,24 @@ function onWheelZoom(e) {
     applyZoomAt(state, e.clientX, e.clientY, e.deltaY, e);
 }
 
-function resetZoom() {
-    const state = getNodeState(GP.baseNode.id);
-    if (!state || !state.canvasContainer || !state.centralPanel) return;
-    if (!state.zoomPrevWidth || !state.zoomPrevHeight) return;
-    state.zoom = 1;
-    state.canvasContainer.style.width = state.zoomBaseWidth + "px";
-    state.canvasContainer.style.height = state.zoomBaseHeight + "px";
+// function resetZoom() {
+//     const state = getNodeState(GP.baseNode.id);
+//     if (!state || !state.canvasContainer || !state.centralPanel) return;
+//     // if (!state.zoomPrevWidth || !state.zoomPrevHeight) return;
+//     if (!state.zoomBaseWidth || !state.zoomBaseHeight) return;
+//     state.zoom = 1;
+//     state.canvasContainer.style.width = state.zoomBaseWidth + "px";
+//     state.canvasContainer.style.height = state.zoomBaseHeight + "px";
 
-    state.centralPanel.scrollLeft = 0;
-    state.centralPanel.scrollTop = 0;
-    // state.zoom = 1;
-    // state.canvasContainer.style.width = state.zoomPrevWidth + "px";
-    // state.canvasContainer.style.height = state.zoomPrevHeight + "px";
+//     state.centralPanel.scrollLeft = 0;
+//     state.centralPanel.scrollTop = 0;
+//     // state.zoom = 1;
+//     // state.canvasContainer.style.width = state.zoomPrevWidth + "px";
+//     // state.canvasContainer.style.height = state.zoomPrevHeight + "px";
 
-    // state.centralPanel.scrollLeft = 0;
-    // state.centralPanel.scrollTop = 0;
-}
+//     // state.centralPanel.scrollLeft = 0;
+//     // state.centralPanel.scrollTop = 0;
+// }
 
 function getCanvasCoords(e, canvas) {
     const rect = canvas.getBoundingClientRect();
@@ -555,7 +562,14 @@ function getBrushSizePx(state) {
 }
 
 function updateBrushCursor(e) {
+
     const state = getNodeState(GP.baseNode.id);
+
+    if (state.currentTool === "Scroll" || state.spaceScrollActive || state.__midScrollActive) {
+        if (state.drawCursor) state.drawCursor.style.display = "none";
+        return;
+    }
+
     const container = state.canvasContainer;
     if (!container) return;
 
@@ -635,11 +649,17 @@ function onPanMouseDown(e) {
     if (!state || !state.centralPanel) return;
 
     if (state.currentTool !== "Scroll") return;
-    if (e.button !== 0) return;
+    // if (e.button !== 0) return;
+    if (e.button !== 0 && e.button !== 1) return;
+
 
     e.preventDefault();
 
+
     state.isPanning = true;
+    if (state.canvasContainer) state.canvasContainer.style.cursor = "grabbing";
+    if (state.drawCursor) state.drawCursor.style.display = "none";
+
     state.panStartX = e.clientX;
     state.panStartY = e.clientY;
     state.panScrollLeft = state.centralPanel.scrollLeft;
@@ -663,6 +683,8 @@ function onPanMouseUp(e) {
     const state = getNodeState(GP.baseNode.id);
     if (!state) return;
     state.isPanning = false;
+    if (state.canvasContainer) state.canvasContainer.style.cursor = (state.currentTool === "Scroll") ? "grab" : "none";
+
 }
 
 //Automask
@@ -726,10 +748,56 @@ export function registerKeyHandlers(scopeElement) {
     const panel = state.centralPanel;
     if (panel) {
         panel.onwheel = (e) => onWheelZoom(e);     // zoom
-        panel.onmousedown = onPanMouseDown;        // hand-pan
+        // panel.onmousedown = onPanMouseDown;        // hand-pan
+        // panel.onmousemove = onPanMouseMove;
+        // panel.onmouseup = onPanMouseUp;
+        // panel.onmouseleave = onPanMouseUp;
+
+        panel.onmousedown = (e) => {
+            const s = getNodeState(GP.baseNode.id);
+            if (!s) return;
+
+            // Middle mouse: force our pan (disable browser autoscroll)
+            if (e.button === 1) {
+                e.preventDefault();
+
+                s.__midScrollActive = true;
+                s.prevTool = s.currentTool || "Brush";
+                s.currentTool = "Scroll";
+                updateToolButtonsHighlight("Scroll");
+
+                if (s.canvasContainer) s.canvasContainer.style.cursor = "grab";
+                if (s.drawCursor) s.drawCursor.style.display = "none";
+
+                onPanMouseDown(e); // will start panning
+                return;
+            }
+
+            onPanMouseDown(e);
+        };
+
         panel.onmousemove = onPanMouseMove;
-        panel.onmouseup = onPanMouseUp;
-        panel.onmouseleave = onPanMouseUp;
+
+        panel.onmouseup = (e) => {
+            onPanMouseUp(e);
+
+            const s = getNodeState(GP.baseNode.id);
+            if (s && s.__midScrollActive) {
+                s.__midScrollActive = false;
+                s.currentTool = s.prevTool || "Brush";
+                updateToolButtonsHighlight(s.currentTool);
+
+                if (s.canvasContainer) s.canvasContainer.style.cursor = "none";
+            }
+        };
+
+        panel.onmouseleave = panel.onmouseup;
+
+        // Important: prevent browser autoscroll on middle click in some browsers
+        panel.onauxclick = (e) => {
+            if (e.button === 1) e.preventDefault();
+        };
+
     }
 
     const mask = state.maskCanvas;

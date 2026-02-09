@@ -180,27 +180,29 @@ export function initBaseImageAndCanvas() {
             mctx.drawImage(maskImg, 0, 0, imgW, imgH);
         }
 
-        const outerContainer = state.centralPanel || containerDiv.parentElement;
-        const boxW = outerContainer?.clientWidth || prevDisplayW;
-        const boxH = outerContainer?.clientHeight || prevDisplayH;
+        fitImageToPanel(state);
 
-        if (boxW && boxH) {
-            const scale = Math.min(boxW / imgW, boxH / imgH);
-            const cssW = imgW * scale;
-            const cssH = imgH * scale;
+        // const outerContainer = state.centralPanel || containerDiv.parentElement;
+        // const boxW = outerContainer?.clientWidth || prevDisplayW;
+        // const boxH = outerContainer?.clientHeight || prevDisplayH;
 
-            containerDiv.style.width = cssW + "px";
-            containerDiv.style.height = cssH + "px";
+        // if (boxW && boxH) {
+        //     const scale = Math.min(boxW / imgW, boxH / imgH);
+        //     const cssW = imgW * scale;
+        //     const cssH = imgH * scale;
 
-            state.zoomBaseWidth = cssW;
-            state.zoomBaseHeight = cssH;
-            state.zoom = 1;
-        }
-        else {
-            state.zoomBaseWidth = imgW;
-            state.zoomBaseHeight = imgH;
-            state.zoom = 1;
-        }
+        //     containerDiv.style.width = cssW + "px";
+        //     containerDiv.style.height = cssH + "px";
+
+        //     state.zoomBaseWidth = cssW;
+        //     state.zoomBaseHeight = cssH;
+        //     state.zoom = 1;
+        // }
+        // else {
+        //     state.zoomBaseWidth = imgW;
+        //     state.zoomBaseHeight = imgH;
+        //     state.zoom = 1;
+        // }
     })().catch((e) => {
         console.error("[RGBYP] initBaseImageAndCanvas async error:", e);
     });
@@ -341,3 +343,34 @@ export async function saveMask() {
     }
 
 }
+
+export function fitImageToPanel(state) {
+    const container = state.canvasContainer;
+    const panel = state.centralPanel;
+    const canvas = state.originalCanvas;
+
+    if (!container || !panel || !canvas) return;
+
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    if (!imgW || !imgH) return;
+
+    const boxW = panel.clientWidth;
+    const boxH = panel.clientHeight;
+    if (!boxW || !boxH) return;
+
+    const scale = Math.min(boxW / imgW, boxH / imgH);
+    const cssW = imgW * scale;
+    const cssH = imgH * scale;
+
+    container.style.width = cssW + "px";
+    container.style.height = cssH + "px";
+
+    state.zoomBaseWidth = cssW;
+    state.zoomBaseHeight = cssH;
+    state.zoom = 1;
+
+    panel.scrollLeft = Math.max(0, (container.scrollWidth - boxW) / 2);
+    panel.scrollTop  = Math.max(0, (container.scrollHeight - boxH) / 2);
+}
+
