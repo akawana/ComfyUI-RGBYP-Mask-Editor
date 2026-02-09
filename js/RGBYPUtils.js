@@ -617,17 +617,17 @@ import {
             console.warn("[RGBYPUtils] setDownscaleFactor failed", e);
         }
     }
-    function registerSettings() {
-        const S = app.ui.settings;
-        function applyDownscaleToAllBridgeNodes() {
-            // console.log("[RGBYPUtils] applyDownscaleToAllBridgeNodes");
-            const nodes = app?.graph?._nodes || [];
-            for (const n of nodes) {
-                if ((n?.type || n?.comfyClass) === "RGBYPMaskBridge") {
-                    setDownscaleFactor(n);
-                }
+    function applyDownscaleToAllBridgeNodes() {
+        // console.log("[RGBYPUtils] applyDownscaleToAllBridgeNodes");
+        const nodes = app?.graph?._nodes || [];
+        for (const n of nodes) {
+            if ((n?.type || n?.comfyClass) === "RGBYPMaskBridge") {
+                setDownscaleFactor(n);
             }
         }
+    }
+    function registerSettings() {
+        const S = app.ui.settings;
         S.addSetting({
             id: "AK.RGBYP.downscale_max_side",
             name: "Downscale to maximum side:",
