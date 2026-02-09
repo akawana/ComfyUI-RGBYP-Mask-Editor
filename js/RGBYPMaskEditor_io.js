@@ -155,9 +155,9 @@ export function initBaseImageAndCanvas() {
         const prevDisplayW = containerDiv.clientWidth || containerDiv.width || imgW;
         const prevDisplayH = containerDiv.clientHeight || containerDiv.height || imgH;
 
-        state.zoomPrevWidth = prevDisplayW;
-        state.zoomPrevHeight = prevDisplayH;
-        state.zoom = 1;
+        // state.zoomPrevWidth = prevDisplayW;
+        // state.zoomPrevHeight = prevDisplayH;
+        // state.zoom = 1;
 
         containerDiv.style.width = imgW + "px";
         containerDiv.style.height = imgH + "px";
@@ -173,8 +173,11 @@ export function initBaseImageAndCanvas() {
 
         const mctx = state.maskCanvas.getContext("2d");
         mctx.clearRect(0, 0, imgW, imgH);
+        // if (maskImg) {
+            // mctx.drawImage(maskImg, 0, 0);
+        // }
         if (maskImg) {
-            mctx.drawImage(maskImg, 0, 0);
+            mctx.drawImage(maskImg, 0, 0, imgW, imgH);
         }
 
         const outerContainer = state.centralPanel || containerDiv.parentElement;
@@ -188,6 +191,15 @@ export function initBaseImageAndCanvas() {
 
             containerDiv.style.width = cssW + "px";
             containerDiv.style.height = cssH + "px";
+
+            state.zoomBaseWidth = cssW;
+            state.zoomBaseHeight = cssH;
+            state.zoom = 1;
+        }
+        else {
+            state.zoomBaseWidth = imgW;
+            state.zoomBaseHeight = imgH;
+            state.zoom = 1;
         }
     })().catch((e) => {
         console.error("[RGBYP] initBaseImageAndCanvas async error:", e);

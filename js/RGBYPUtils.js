@@ -521,13 +521,13 @@ import {
 
             const name = data.composite || data.original;
             if (!name) return;
-            console.log("restoreRGBYPBridgePreview()");
+            // console.log("restoreRGBYPBridgePreview()");
 
             // const img = await loadImage(name, "input", "clipspace");
             let img;
             try {
                 img = await loadImage(name, "input", "clipspace");
-                console.log("restoreRGBYPBridgePreview loaded image:", name);
+                // console.log("restoreRGBYPBridgePreview loaded image:", name);
             } catch (e) {
                 // console.error("Failed to load image:", name, e);
                 updateWidgetValue(node, "rgbyp_json", "", true);
@@ -543,9 +543,144 @@ import {
         }
     }
 
+    // function setDownscaleFactor(node) {
+    //     try {
+    //         if ((node?.type || node?.comfyClass) !== "RGBYPMaskBridge") return;
+
+    //         const w = getWidget(node, "downscale_preview_mask_to");
+    //         if (!w) return;
+
+    //         const settings = app?.ui?.settings || null;
+    //         const getSetting =
+    //             typeof settings?.getSettingValue === "function"
+    //                 ? settings.getSettingValue.bind(settings)
+    //                 : null;
+
+    //         let enable = false;
+    //         let maxSide = 0;
+
+    //         if (getSetting) {
+    //             try {
+    //                 enable = !!getSetting("AK.RGBYP.downscale_preview_bridge");
+    //                 maxSide = Number(getSetting("AK.RGBYP.downscale_max_side")) || 0;
+    //             } catch (_) { }
+    //         }
+
+    //         if (!getSetting) {
+    //             try {
+    //                 enable = window.localStorage.getItem("AK.RGBYP.downscale_preview_bridge") === "true";
+    //                 maxSide = Number(window.localStorage.getItem("AK.RGBYP.downscale_max_side")) || 0;
+    //             } catch (_) { }
+    //         }
+
+    //         updateWidgetValue(node, "downscale_preview_mask_to", enable ? maxSide : 0, true);
+    //         node.graph?.setDirtyCanvas(true, true);
+    //     } catch (e) {
+    //         console.warn("[RGBYPUtils] setDownscaleFactor failed", e);
+    //     }
+    // }
+
+    let __rgbyp_ds_enable = null;   // boolean
+    let __rgbyp_ds_maxSide = null;  // number
+    let __rgbyp_scale_mask_output = null; // boolean
+
+    function initDownscaleCacheFromSettings() {
+        try {
+            __rgbyp_ds_enable = !!app.extensionManager.setting.get("AK.RGBYP.downscale_preview_bridge");
+            __rgbyp_ds_maxSide = Number(app.extensionManager.setting.get("AK.RGBYP.downscale_max_side")) || 800;
+            __rgbyp_scale_mask_output = !!app.extensionManager.setting.get("AK.RGBYP.scale_mask_output");
+        } catch (_) {
+            // fallback дефолты
+            __rgbyp_ds_enable = false;
+            __rgbyp_ds_maxSide = 800;
+            __rgbyp_scale_mask_output = false;
+
+        }
+    }
+
+    function setDownscaleFactor(node) {
+        try {
+            const wDownscale = getWidget(node, "downscale_preview_mask_to");
+            if (wDownscale) {
+                const enable = !!__rgbyp_ds_enable;
+                const maxSide = Number(__rgbyp_ds_maxSide) || 0;
+                updateWidgetValue(node, "downscale_preview_mask_to", enable ? maxSide : 0, true);
+            }
+
+            const wScaleMask = getWidget(node, "scale_mask_output");
+            if (wScaleMask) {
+                updateWidgetValue(node, "scale_mask_output", !!__rgbyp_scale_mask_output, true);
+            }
+
+            // node.graph?.setDirtyCanvas(true, true);
+        } catch (e) {
+            console.warn("[RGBYPUtils] setDownscaleFactor failed", e);
+        }
+    }
+    function registerSettings() {
+        const S = app.ui.settings;
+        function applyDownscaleToAllBridgeNodes() {
+            // console.log("[RGBYPUtils] applyDownscaleToAllBridgeNodes");
+            const nodes = app?.graph?._nodes || [];
+            for (const n of nodes) {
+                if ((n?.type || n?.comfyClass) === "RGBYPMaskBridge") {
+                    setDownscaleFactor(n);
+                }
+            }
+        }
+        S.addSetting({
+            id: "AK.RGBYP.downscale_max_side",
+            name: "Downscale to maximum side:",
+            type: "number",
+            defaultValue: 800,
+            attrs: {
+                min: 0,
+                max: 3200,
+                step: 32,
+            },
+            category: ["AK", "RGBYP", "Downscale to maximum side"],
+            onChange: (newVal, oldVal) => {
+                __rgbyp_ds_maxSide = Number(newVal) || 0;
+                applyDownscaleToAllBridgeNodes();
+            },
+        });
+        S.addSetting({
+            id: "AK.RGBYP.scale_mask_output",
+            name: "Scale output RGBYP mask to input image size:",
+            type: "boolean",
+            defaultValue: false,
+            category: ["AK", "RGBYP", "Scale output RGBYP mask to input image size"],
+            onChange: (newVal, oldVal) => {
+                __rgbyp_scale_mask_output = !!newVal;
+                applyDownscaleToAllBridgeNodes();
+            },
+        });
+        S.addSetting({
+            id: "AK.RGBYP.downscale_preview_bridge",
+            name: "Downscale preview in Mask Bridge node:",
+            type: "boolean",
+            defaultValue: false,
+            category: ["AK", "RGBYP", "Downscale preview in Mask Bridge node"],
+            onChange: (newVal, oldVal) => {
+                __rgbyp_ds_enable = !!newVal;
+                applyDownscaleToAllBridgeNodes();
+            },
+        });
+
+
+    }
+
+
 
     app.registerExtension({
         name: "RGBYPUtils.LoadImageButtons",
+
+        setup() {
+            registerSettings();
+            initDownscaleCacheFromSettings();
+            applyDownscaleToAllBridgeNodes();
+        },
+
         beforeRegisterNodeDef(nodeType, nodeData) {
             const nm = nodeData?.name;
             if (nm !== "RGBYPMaskBridge" && nm !== "RGBYPLoadImage") return;
@@ -556,6 +691,10 @@ import {
                 // hideWidget(this, "rgbyp_json");
                 installRawIconButtons(this);
                 installImageChangeHook(this);
+                if ((this.type || this.comfyClass) === "RGBYPMaskBridge") {
+                    setDownscaleFactor(this);
+                }
+
             };
 
             const oldOnConfigure = nodeType.prototype.onConfigure;
@@ -565,6 +704,7 @@ import {
                 installRawIconButtons(this);
                 installImageChangeHook(this);
                 if ((this.type || this.comfyClass) === "RGBYPMaskBridge") {
+                    setDownscaleFactor(this);
                     restoreRGBYPBridgePreview(this);
                 }
             };

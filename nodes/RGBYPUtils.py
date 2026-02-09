@@ -38,20 +38,22 @@ def _make_black_64(device="cpu", dtype=torch.float32):
     return torch.zeros((1, 64, 64, 3), device=device, dtype=dtype)
 
 
-
 # ---------------------------
 # Additional helpers for RGBYPMaskBridge (kept additive to avoid breaking other nodes)
 # ---------------------------
 
 import folder_paths
 
+
 def _rgbyp_clipspace_dir():
     return os.path.join(folder_paths.get_input_directory(), "clipspace")
+
 
 def _ensure_clipspace_dir():
     d = _rgbyp_clipspace_dir()
     os.makedirs(d, exist_ok=True)
     return d
+
 
 def _tensor_to_uint8_rgba(tensor):
     # tensor: (1,H,W,C) float 0..1, C=3 or 4
@@ -81,17 +83,39 @@ def _tensor_to_uint8_rgba(tensor):
     arr = (t.numpy() * 255.0).round().astype(np.uint8)
     return arr
 
-def save_image_tensor_to_clipspace(tensor, filename):
-    """Save IMAGE tensor to input/clipspace as PNG. Returns filename on success, else None."""
+
+def save_image_tensor_to_clipspace(tensor, filename, max_side: int = 0):
+    """Save IMAGE tensor to input/clipspace as PNG. Optionally downscale to fit max_side (keeps aspect)."""
     if not filename or not isinstance(filename, str):
         return None
+
     d = _ensure_clipspace_dir()
     path = os.path.join(d, filename)
+
     try:
         arr = _tensor_to_uint8_rgba(tensor)
         if arr is None:
             return None
+
         img = Image.fromarray(arr, mode="RGBA")
+
+        # Optional downscale
+        if isinstance(max_side, int) and max_side > 0:
+            w, h = img.size
+            mx = max(w, h)
+            if mx > max_side:
+                scale = max_side / float(mx)
+                nw = max(1, int(round(w * scale)))
+                nh = max(1, int(round(h * scale)))
+
+                # Pillow compatibility: Resampling may not exist in very old versions
+                try:
+                    resample = Image.Resampling.LANCZOS
+                except Exception:
+                    resample = Image.LANCZOS
+
+                img = img.resize((nw, nh), resample=resample)
+
         img.save(path, format="PNG")
         return filename
     except Exception:
@@ -111,8 +135,9 @@ def save_preview_image_tensor_to_clipspace(tensor, filename, max_side=512):
         img = Image.fromarray(arr, mode="RGBA")
         try:
             w, h = img.size
-            ms = int(max_side) if max_side else 512
-            if ms > 0 and (w > ms or h > ms):
+            # ms = int(max_side) if max_side else 512
+            ms = int(max_side) if max_side is not None else None
+            if ms is not None and ms > 0 and (w > ms or h > ms):
                 if w >= h:
                     nw = ms
                     nh = max(1, int(round(h * (ms / float(w)))))
@@ -127,10 +152,12 @@ def save_preview_image_tensor_to_clipspace(tensor, filename, max_side=512):
     except Exception:
         return None
 
+
 def clipspace_exists(filename):
     if not filename or not isinstance(filename, str):
         return False
     return os.path.isfile(os.path.join(_rgbyp_clipspace_dir(), filename))
+
 
 def clipspace_image_size(filename):
     if not clipspace_exists(filename):
@@ -172,10 +199,15 @@ def bake_composite_with_mask(image, mask_rgba, opacity=0.7):
             if tmp.device.type != "cpu":
                 tmp = tmp.to("cpu")
             arr = tmp.float().clamp(0.0, 1.0)[0].numpy()
-            img = Image.fromarray((arr * 255.0).astype(np.uint8), mode="RGBA" if arr.shape[2] == 4 else "RGB")
+            img = Image.fromarray(
+                (arr * 255.0).astype(np.uint8),
+                mode="RGBA" if arr.shape[2] == 4 else "RGB",
+            )
             img = img.resize((int(w), int(h)), resample=Image.LANCZOS)
             arr2 = np.array(img).astype(np.float32) / 255.0
-            m = torch.from_numpy(arr2)[None, ...].to(device=base.device, dtype=base.dtype)
+            m = torch.from_numpy(arr2)[None, ...].to(
+                device=base.device, dtype=base.dtype
+            )
     except Exception:
         pass
 
@@ -189,6 +221,7 @@ def bake_composite_with_mask(image, mask_rgba, opacity=0.7):
     a = (alpha.clamp(0.0, 1.0) * float(opacity)).clamp(0.0, 1.0)
     comp = base * (1.0 - a) + mask_rgb * a
     return comp.clamp(0.0, 1.0)
+
 
 def _image_fingerprint_variantA(image):
     """Fast fingerprint: (data_ptr, shape, dtype, device)."""
@@ -212,12 +245,14 @@ def _image_fingerprint_variantA(image):
         device = None
     return (ptr, shape, dtype, device)
 
+
 def is_input_image_changed_variantA(prev_fingerprint, image):
     """Returns (is_changed: bool, new_fingerprint)."""
     new_fp = _image_fingerprint_variantA(image)
     if prev_fingerprint is None:
         return True, new_fp
     return (new_fp != prev_fingerprint), new_fp
+
 
 def _rgbyp_mask_to_regular_mask(rgbyp_mask, device=None):
     if isinstance(rgbyp_mask, torch.Tensor) and rgbyp_mask.dim() == 4:

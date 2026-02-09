@@ -75,6 +75,8 @@ export function getNodeState(nodeId) {
             zoom: 1,
             zoomPrevWidth: null,
             zoomPrevHeight: null,
+            zoomBaseWidth: null,
+            zoomBaseHeight: null,
             drawCursor: null,
             isDrawing: false,
             drawLastX: 0,

@@ -7,19 +7,19 @@ async function copyMaskToClipboard() {
     if (!state || !state.maskCanvas) return;
     const canvas = state.maskCanvas;
 
-// skip if mask is empty (fully transparent)
-const ctx = canvas.getContext("2d");
-if (ctx) {
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let hasAlpha = false;
-    for (let i = 3; i < data.length; i += 4) {
-        if (data[i] !== 0) {
-            hasAlpha = true;
-            break;
+    // skip if mask is empty (fully transparent)
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let hasAlpha = false;
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i] !== 0) {
+                hasAlpha = true;
+                break;
+            }
         }
+        if (!hasAlpha) return;
     }
-    if (!hasAlpha) return;
-}
 
     try {
         if (navigator.clipboard && window.ClipboardItem) {
@@ -133,7 +133,7 @@ async function onKeyDownStub(e) {
     }
 
     // Space  : temporary pan
-    
+
     if (e.code === "Space") {
         if (state && !state.spaceScrollActive) {
             state.spaceScrollActive = true;
@@ -202,9 +202,9 @@ async function onKeyDownStub(e) {
 
     if (e.key === "Enter") {
         try {
-            
+
             await saveMask();
-            
+
         } catch (err) {
             console.error("[RGBYP] saveMask error on Enter:", err);
         }
@@ -278,8 +278,11 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     const relY = yOnCanvas / prevCssH;
 
     if (!state.zoomPrevWidth || !state.zoomPrevHeight) {
-        state.zoomPrevWidth = prevCssW;
-        state.zoomPrevHeight = prevCssH;
+        // state.zoomPrevWidth = prevCssW;
+        // state.zoomPrevHeight = prevCssH;
+        state.zoomBaseWidth = prevCssW;
+        state.zoomBaseHeight = prevCssH;
+        state.zoom = 1;
     }
 
     const factor = deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -293,8 +296,14 @@ function applyZoomAt(state, centerClientX, centerClientY, deltaY, cursorEvent) {
     if (newZoom > MAX_ZOOM) newZoom = MAX_ZOOM;
     state.zoom = newZoom;
 
-    const cssW = state.zoomPrevWidth * newZoom;
-    const cssH = state.zoomPrevHeight * newZoom;
+    const baseW = state.zoomBaseWidth;
+    const baseH = state.zoomBaseHeight;
+
+    const cssW = baseW * newZoom;
+    const cssH = baseH * newZoom;
+
+    // const cssW = state.zoomPrevWidth * newZoom;
+    // const cssH = state.zoomPrevHeight * newZoom;
 
     container.style.width = cssW + "px";
     container.style.height = cssH + "px";
@@ -326,13 +335,18 @@ function resetZoom() {
     const state = getNodeState(GP.baseNode.id);
     if (!state || !state.canvasContainer || !state.centralPanel) return;
     if (!state.zoomPrevWidth || !state.zoomPrevHeight) return;
-
     state.zoom = 1;
-    state.canvasContainer.style.width = state.zoomPrevWidth + "px";
-    state.canvasContainer.style.height = state.zoomPrevHeight + "px";
+    state.canvasContainer.style.width = state.zoomBaseWidth + "px";
+    state.canvasContainer.style.height = state.zoomBaseHeight + "px";
 
     state.centralPanel.scrollLeft = 0;
     state.centralPanel.scrollTop = 0;
+    // state.zoom = 1;
+    // state.canvasContainer.style.width = state.zoomPrevWidth + "px";
+    // state.canvasContainer.style.height = state.zoomPrevHeight + "px";
+
+    // state.centralPanel.scrollLeft = 0;
+    // state.centralPanel.scrollTop = 0;
 }
 
 function getCanvasCoords(e, canvas) {
@@ -355,7 +369,7 @@ function onMaskMouseDown(e) {
     if (state.currentTool === "Erase") {
         state.drawMode = "Erase";
     } else {
-        
+
         state.drawMode = (e.button === 2) ? "Erase" : "Paint";
     }
 
@@ -450,7 +464,7 @@ function onMaskMouseUp(e) {
     if (state.isDrawing) {
         const ctx = canvas.getContext("2d");
         ctx.closePath();
-        
+
         ctx.globalCompositeOperation = "source-over";
     }
     state.isDrawing = false;
@@ -458,7 +472,7 @@ function onMaskMouseUp(e) {
 }
 
 function onMaskContextMenu(e) {
-    
+
     e.preventDefault();
 }
 
@@ -483,7 +497,7 @@ function adjustMaskOpacityByStep(direction) {
     let alpha = state.maskOpacity;
     if (alpha == null || isNaN(alpha)) alpha = 1;
 
-    const step = 0.05; 
+    const step = 0.05;
     alpha += direction * step;
     alpha = clampMaskOpacity(alpha);
 
@@ -493,7 +507,7 @@ function adjustMaskOpacityByStep(direction) {
     if (state.opacitySlider) {
         const v = Math.round(alpha * 100);
         state.opacitySlider.value = String(v);
-        
+
         state.opacitySlider.dispatchEvent(new Event("input", { bubbles: true }));
     }
 }
@@ -670,28 +684,28 @@ function applyAutoMask(state, modeIndex) {
     const BLUE = "rgba(0,0,255,1)";
 
     if (modeIndex === 0) {
-        
+
         const mid = w / 2;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, mid, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(mid, 0, w - mid, h);
     } else if (modeIndex === 1) {
-        
+
         const x1 = w / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, x1, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(x1, 0, w - x1, h);
     } else if (modeIndex === 2) {
-        
+
         const x2 = (w * 2) / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, x2, h);
         ctx.fillStyle = GREEN;
         ctx.fillRect(x2, 0, w - x2, h);
     } else if (modeIndex === 3) {
-        
+
         const step = w / 3;
         ctx.fillStyle = RED;
         ctx.fillRect(0, 0, step, h);
@@ -885,13 +899,13 @@ export function registerKeyHandlers(scopeElement) {
     const saveBtn = scopeElement.querySelector('button[data-tool="Save"]');
     if (saveBtn) {
         state.saveBtn = saveBtn;
-        saveBtn.onclick = async(e) => {
+        saveBtn.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
 
             try {
                 await saveMask();
-                
+
             } catch (err) {
                 console.error("[RGBYP] saveMask error on button click:", err);
             }
@@ -899,23 +913,23 @@ export function registerKeyHandlers(scopeElement) {
         };
     }
 
-const copyMaskBtn = scopeElement.querySelector('button[data-tool="Copy Mask"]');
-if (copyMaskBtn) {
-    copyMaskBtn.onclick = async(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        await copyMaskToClipboard();
-    };
-}
+    const copyMaskBtn = scopeElement.querySelector('button[data-tool="Copy Mask"]');
+    if (copyMaskBtn) {
+        copyMaskBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await copyMaskToClipboard();
+        };
+    }
 
-const pasteMaskBtn = scopeElement.querySelector('button[data-tool="Paste Mask"]');
-if (pasteMaskBtn) {
-    pasteMaskBtn.onclick = async(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        await pasteMaskFromClipboard();
-    };
-}
+    const pasteMaskBtn = scopeElement.querySelector('button[data-tool="Paste Mask"]');
+    if (pasteMaskBtn) {
+        pasteMaskBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            await pasteMaskFromClipboard();
+        };
+    }
 
 }
 
