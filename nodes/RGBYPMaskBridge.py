@@ -57,7 +57,8 @@ class RGBYPMaskBridge:
             self._rgbyp_mask_cache.pop(path, None)
             return None
 
-        t = t[..., :3].cpu()
+        # t = t[..., :3].cpu()
+        t = t.cpu()
         self._rgbyp_mask_cache[path] = {"sig": sig, "tensor": t}
         return t
 
