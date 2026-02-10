@@ -1,96 +1,80 @@
 import json
-import time
+from typing import Any, Dict, Optional
+
 import torch
-import os
+from PIL import Image
+import numpy as np
 
 from .RGBYPUtils import (
     _make_black_64,
     _load_image_from_path,
     save_image_tensor_to_clipspace,
-    clipspace_exists,
-    clipspace_image_size,
     bake_composite_with_mask,
-    is_input_image_changed_variantA,
     clipspace_path,
-    save_preview_image_tensor_to_clipspace,
-    is_image_changed,
 )
 
 
+def _downscale_tensor_max_side(image: torch.Tensor, max_side: int) -> torch.Tensor:
+    if not isinstance(image, torch.Tensor) or image.dim() != 4 or image.shape[0] != 1:
+        return image
+    if not isinstance(max_side, int) or max_side <= 0:
+        return image
+
+    _, h, w, c = image.shape
+    h = int(h)
+    w = int(w)
+    if max(h, w) <= max_side:
+        return image
+
+    scale = float(max_side) / float(max(h, w))
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+
+    dev = image.device
+    dt = image.dtype
+
+    t = image.detach()
+    if t.device.type != "cpu":
+        t = t.to("cpu")
+    t = t.float().clamp(0.0, 1.0)[0]
+
+    arr = (t.numpy() * 255.0).round().astype(np.uint8)
+    mode = "RGBA" if int(c) == 4 else "RGB"
+    img = Image.fromarray(arr, mode=mode)
+
+    try:
+        resample = Image.Resampling.LANCZOS
+    except Exception:
+        resample = Image.LANCZOS
+
+    img = img.resize((nw, nh), resample=resample)
+    arr2 = np.array(img).astype(np.float32) / 255.0
+    out = torch.from_numpy(arr2)[None, ...].to(device=dev, dtype=dt)
+    return out.clamp(0.0, 1.0)
+
+
+def _is_mask_64x64(mask: Any) -> bool:
+    if not isinstance(mask, torch.Tensor) or mask.dim() != 4 or mask.shape[0] != 1:
+        return False
+    try:
+        return int(mask.shape[1]) == 64 and int(mask.shape[2]) == 64
+    except Exception:
+        return False
+
+
 class RGBYPMaskBridge:
-    def __init__(self):
-        # cache: abs_path -> {"sig": (mtime_ns, size_bytes, ref_w, ref_h), "tensor": cpu_tensor_rgb}
-        self._rgbyp_mask_cache = {}
-
-    def _rgbyp_load_mask_cached(
-        self, mask_filename: str, ref_tensor: torch.Tensor | None
-    ):
-        """
-        Returns CPU tensor (H,W,3) from cache, reloads from disk only if file changed.
-        ref_tensor is used only when scaling is requested (to match output_image size).
-        """
-        path = clipspace_path(mask_filename)
-
-        try:
-            st = os.stat(path)
-        except FileNotFoundError:
-            self._rgbyp_mask_cache.pop(path, None)
-            return None
-
-        ref_w = (
-            int(ref_tensor.shape[2])
-            if isinstance(ref_tensor, torch.Tensor) and ref_tensor.ndim >= 3
-            else None
-        )
-        ref_h = (
-            int(ref_tensor.shape[1])
-            if isinstance(ref_tensor, torch.Tensor) and ref_tensor.ndim >= 3
-            else None
-        )
-        sig = (st.st_mtime_ns, st.st_size, ref_w, ref_h)
-
-        c = self._rgbyp_mask_cache.get(path)
-        if c and c.get("sig") == sig:
-            return c.get("tensor")
-
-        t = _load_image_from_path(path, ref_tensor=ref_tensor)
-        if not isinstance(t, torch.Tensor):
-            self._rgbyp_mask_cache.pop(path, None)
-            return None
-
-        # t = t[..., :3].cpu()
-        t = t.cpu()
-        self._rgbyp_mask_cache[path] = {"sig": sig, "tensor": t}
-        return t
-
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "image": ("IMAGE",),
-                "clear_on_size_change": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                        "label_on": "Clear",
-                        "label_off": "Keep",
-                    },
-                ),
-                "downscale_preview_mask_to": (
+                "downscale_preview_to": (
                     "INT",
                     {
                         "default": 512,
                         "min": 0,
                         "max": 3200,
                         "step": 1,
-                    },
-                ),
-                "scale_mask_output": (
-                    "BOOLEAN",
-                    {
-                        "default": False,
-                        "label_on": "Scale to Original Size",
-                        "label_off": "Keep as-is",
                     },
                 ),
                 "rgbyp_json": (
@@ -106,437 +90,102 @@ class RGBYPMaskBridge:
             },
         }
 
-    DESCRIPTION = "Takes an input image, lets you draw an RGBYP mask on it, and outputs both the image and the mask."
+    DESCRIPTION = "Pass-through image + cached RGBYP mask; maintains a clipspace preview (original or composite) based on JSON timestamp."
     CATEGORY = "AK/RGBYP"
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image", "rgbyp_mask")
     OUTPUT_NODE = True
     FUNCTION = "execute"
 
-    def _get_last_preview(self):
-        name = getattr(self, "_rgbyp_preview_filename", None)
-        if isinstance(name, str) and name:
-            return name
-        return None
+    _state: Dict[str, Dict[str, Any]] = {}
 
-    def _set_last_preview(self, name: str | None):
-        if isinstance(name, str) and name:
-            self._rgbyp_preview_filename = name
+    def _get_state(self, unique_id: Optional[str], image: torch.Tensor) -> Dict[str, Any]:
+        uid = str(unique_id) if unique_id is not None else "none"
+        st = self._state.get(uid)
+        if st is None:
+            st = {
+                "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
+                "previousTimestamp": 0,
+            }
+            self._state[uid] = st
         else:
-            self._rgbyp_preview_filename = None
-
-    def _get_last_input_fp(self):
-        return getattr(self, "_rgbyp_last_input_fp", None)
-
-    def _set_last_input_fp(self, fp):
-        self._rgbyp_last_input_fp = fp
+            m = st.get("mask_cache")
+            if isinstance(m, torch.Tensor):
+                try:
+                    st["mask_cache"] = m.to(device=image.device, dtype=image.dtype)
+                except Exception:
+                    pass
+        return st
 
     def execute(
         self,
         image,
-        clear_on_size_change=True,
-        downscale_preview_mask_to=512,
-        scale_mask_output=False,
+        downscale_preview_to=512,
         rgbyp_json="",
         unique_id=None,
     ):
-        if unique_id is None:
-            unique_id = "0"
-
-        _, inputHeight, inputWidth, _ = image.shape
-
-        json_available = False
-        json_obj = None
-        preview_mask_available = False
-        preview_filename = None
-
-        last_fp = self._get_last_input_fp()
-        isInputImageChanged, new_fp = is_input_image_changed_variantA(last_fp, image)
-        self._set_last_input_fp(new_fp)
-
-        # if last_fp is None:
-        #     isInputImageChanged = False
-
-        # first run after server start: don't trigger the "input changed" branch
-        # if last_sig is None:
-            # isInputImageChanged = False
-
-
-        # isInputImageChanged, new_fp = is_input_image_changed_variantA(
-        #     self._get_last_input_fp(), image
-        # )
-        # self._set_last_input_fp(new_fp)
-
         output_image = image
-        rgbypOutputMask = _make_black_64(device=image.device, dtype=image.dtype)
 
-        if isinstance(rgbyp_json, str) and rgbyp_json.strip():
+        st = self._get_state(unique_id, image)
+
+        rgbyp_json_available = bool(rgbyp_json and str(rgbyp_json).strip())
+
+        if not rgbyp_json_available:
+            if not _is_mask_64x64(st.get("mask_cache")):
+                st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
+            if int(st.get("previousTimestamp", 0) or 0) != 0:
+                st["previousTimestamp"] = 0
+
+        previousTimestamp = int(st.get("previousTimestamp", 0) or 0)
+        maskChanged = False
+
+        parsed = None
+        if rgbyp_json_available:
             try:
-                json_obj = json.loads(rgbyp_json)
-                if isinstance(json_obj, dict):
-                    json_available = True
+                parsed = json.loads(rgbyp_json)
             except Exception:
-                json_available = False
-                json_obj = None
+                parsed = None
 
-        mask_filename_from_json = None
-        composite_filename_from_json = None
-        original_filename_from_json = None
-        if json_available:
-            mask_filename_from_json = json_obj.get("mask")
-            composite_filename_from_json = json_obj.get("composite")
-            original_filename_from_json = json_obj.get("original")
+        if isinstance(parsed, dict):
+            ts = parsed.get("rgbyp_timestamp", 0)
+            try:
+                ts_int = int(ts)
+            except Exception:
+                ts_int = 0
 
-        new_rgbyp_json = rgbyp_json if isinstance(rgbyp_json, str) else ""
+            if ts_int != previousTimestamp:
+                maskChanged = True
 
-        if (
-            isinstance(composite_filename_from_json, str)
-            and composite_filename_from_json
-            and clipspace_exists(composite_filename_from_json)
-        ):
-            preview_filename = composite_filename_from_json
-        elif (
-            isinstance(original_filename_from_json, str)
-            and original_filename_from_json
-            and clipspace_exists(original_filename_from_json)
-        ):
-            preview_filename = original_filename_from_json
-        else:
-            last_prev = self._get_last_preview()
-            if last_prev and clipspace_exists(last_prev):
-                preview_filename = last_prev
+            previousTimestamp = ts_int
+            st["previousTimestamp"] = previousTimestamp
 
-        preview_available = bool(preview_filename)
-        if (not preview_available) and (not json_available):
-            nodeId = str(unique_id)
-            preview_name = f"RGBYPBridge-rgbyp-original-{nodeId}.png"
+        preview_image = image
+        if isinstance(downscale_preview_to, int) and downscale_preview_to > 0:
+            preview_image = _downscale_tensor_max_side(image, int(downscale_preview_to))
 
-            if int(downscale_preview_mask_to or 0) > 0:
-                save_preview_image_tensor_to_clipspace(
-                    output_image, preview_name, int(downscale_preview_mask_to)
-                )
-            else:
-                save_image_tensor_to_clipspace(output_image, preview_name)
+        original_filename = f"rgbyp-original-{unique_id}.png"
+        saved_original = save_image_tensor_to_clipspace(preview_image, original_filename, max_side=0)
+        original_filename = saved_original or ""
 
-            preview_filename = preview_name
-            preview_available = True
-            self._set_last_preview(preview_name)     
-        
-        if last_sig is None and preview_available:
-            isInputImageChanged = False
-   
+        preview_filename = original_filename
 
-        preview_mask_available = False
-        if (
-            isinstance(mask_filename_from_json, str)
-            and mask_filename_from_json
-            and clipspace_exists(mask_filename_from_json)
-        ):
-            preview_mask_available = True
+        if maskChanged and isinstance(parsed, dict):
+            mask_name = parsed.get("mask", "")
+            mask_tensor = None
+            if isinstance(mask_name, str) and mask_name.strip():
+                mp = clipspace_path(mask_name.strip())
+                mask_tensor = _load_image_from_path(mp, ref_tensor=image)
 
-        if (not isInputImageChanged) and preview_mask_available:
-            mask_cpu = self._rgbyp_load_mask_cached(
-                mask_filename_from_json,
-                ref_tensor=(output_image if scale_mask_output else None),
-            )
-            if isinstance(mask_cpu, torch.Tensor):
-                rgbypOutputMask = mask_cpu.to(
-                    device=output_image.device, dtype=output_image.dtype
-                )
-        # if (not isInputImageChanged) and preview_mask_available:
-        #     mask_tensor = _load_image_from_path(
-        #         clipspace_path(mask_filename_from_json),
-        #         ref_tensor=(output_image if scale_mask_output else None),
-        #     )
-        #     if isinstance(mask_tensor, torch.Tensor):
-        #         rgbypOutputMask = mask_tensor[..., :3].to(
-        #             device=output_image.device, dtype=output_image.dtype
-        #         )
-        # mask_tensor = _load_image_from_path(
-        #     clipspace_path(mask_filename_from_json), ref_tensor=output_image
-        # )
-        # if isinstance(mask_tensor, torch.Tensor):
-        #     rgbypOutputMask = mask_tensor[..., :3].to(
-        #         device=output_image.device, dtype=output_image.dtype
-        #     )
+            if isinstance(mask_tensor, torch.Tensor):
+                st["mask_cache"] = mask_tensor.to(device=image.device, dtype=image.dtype)
 
-        ts = str(int(time.time() * 1000))
-        nodeId = str(unique_id)
+            comp = bake_composite_with_mask(preview_image, st["mask_cache"])
+            if isinstance(comp, torch.Tensor):
+                composite_filename = f"rgbyp-composite-{unique_id}.png"
+                saved_comp = save_image_tensor_to_clipspace(comp, composite_filename, max_side=0)
+                preview_filename = saved_comp or preview_filename
 
-        if isInputImageChanged:
-            rgbypOutputMask = _make_black_64(device=image.device, dtype=image.dtype)
-
-            # Keep disk IO cheap until the user has a mask/json.
-            if not json_available:
-                new_rgbyp_json = ""
-                preview_name = f"RGBYPBridge-rgbyp-original-{nodeId}.png"
-                if downscale_preview_mask_to > 0:
-                    save_preview_image_tensor_to_clipspace(
-                        output_image,
-                        preview_name,
-                        max_side=downscale_preview_mask_to,
-                    )
-                else:
-                    save_image_tensor_to_clipspace(output_image, preview_name)
-
-                preview_filename = preview_name
-                self._set_last_preview(preview_filename)
-            else:
-                if preview_available:
-                    # sz = clipspace_image_size(preview_filename)
-                    # sizeMatch = False
-                    # if sz:
-                    #     previousWidth, previousHeight = int(sz[0]), int(sz[1])
-                    #     sizeMatch = (previousWidth == int(inputWidth)) and (
-                    #         previousHeight == int(inputHeight)
-                    #     )
-
-                    sz = clipspace_image_size(preview_filename)
-                    sizeMatch = False
-                    if sz:
-                        previousWidth, previousHeight = int(sz[0]), int(sz[1])
-
-                        ms = int(downscale_preview_mask_to or 0)
-                        if ms > 0:
-                            # expected preview size is "fit max side to ms" while keeping aspect
-                            mx = max(int(inputWidth), int(inputHeight))
-                            if mx > 0:
-                                scale = float(ms) / float(mx) if mx > ms else 1.0
-                                expW = max(1, int(round(int(inputWidth) * scale)))
-                                expH = max(1, int(round(int(inputHeight) * scale)))
-                                sizeMatch = (previousWidth == expW) and (previousHeight == expH)
-                        else:
-                            sizeMatch = (previousWidth == int(inputWidth)) and (previousHeight == int(inputHeight))
-                    original_name = f"RGBYPBridge-rgbyp-original-{nodeId}.png"
-                    save_image_tensor_to_clipspace(output_image, original_name)
-
-                    if clear_on_size_change and (not sizeMatch):
-                        preview_filename = original_name
-                        self._set_last_preview(preview_filename)
-                        new_rgbyp_json = ""
-                    else:
-                        if preview_mask_available:
-                            # mask_tensor = _load_image_from_path(
-                            #     clipspace_path(mask_filename_from_json),
-                            #     ref_tensor=output_image,
-                            # )
-                            # mask_tensor = _load_image_from_path(
-                            #     clipspace_path(mask_filename_from_json),
-                            #     ref_tensor=(
-                            #         output_image if scale_mask_output else None
-                            #     ),
-                            # )
-                            mask_tensor = _load_image_from_path(
-                                clipspace_path(mask_filename_from_json),
-                                # input changed + keep mask => always match new input size
-                                ref_tensor=output_image,
-                            )                            
-                            composite_tensor = bake_composite_with_mask(
-                                output_image, mask_tensor, opacity=0.7
-                            )
-
-                            composite_name = f"RGBYPBridge-rgbyp-composite-{nodeId}.png"
-                            mask_name = f"RGBYPBridge-rgbyp-mask-{nodeId}.png"
-
-                            if downscale_preview_mask_to > 0:
-                                save_preview_image_tensor_to_clipspace(composite_tensor, composite_name, int(downscale_preview_mask_to))
-                                save_preview_image_tensor_to_clipspace(mask_tensor,      mask_name,      int(downscale_preview_mask_to))
-                            else:
-                                save_image_tensor_to_clipspace(composite_tensor, composite_name)
-                                save_image_tensor_to_clipspace(mask_tensor, mask_name)
-                            # save_image_tensor_to_clipspace(
-                            #     composite_tensor, composite_name
-                            # )
-                            # save_image_tensor_to_clipspace(mask_tensor, mask_name)
-
-                            # update in-memory cache for the newly written mask
-                            # try:
-                            #     p = clipspace_path(mask_name)
-                            #     st = os.stat(p)
-                            #     sig = (st.st_mtime_ns, st.st_size, None, None)  # ref=None because we want "as-is" output
-                            #     self._rgbyp_mask_cache[p] = {"sig": sig, "tensor": mask_tensor[..., :3].cpu()}
-                            # except Exception:
-                            #     pass
-
-
-                            new_rgbyp_json = json.dumps(
-                                {
-                                    "timestamp": ts,
-                                    "original": original_name,
-                                    "mask": mask_name,
-                                    "composite": composite_name,
-                                },
-                                ensure_ascii=False,
-                            )
-
-                            preview_filename = composite_name
-                            self._set_last_preview(preview_filename)
-
-                            # Output mask must match what we saved to disk (downscaled when downscale_preview_mask_to > 0)
-                            out_mask_cpu = self._rgbyp_load_mask_cached(mask_name, ref_tensor=None)
-                            if isinstance(out_mask_cpu, torch.Tensor):
-                                rgbypOutputMask = out_mask_cpu.to(device=output_image.device, dtype=output_image.dtype)
-                            # if isinstance(mask_tensor, torch.Tensor):
-                            #     rgbypOutputMask = mask_tensor[..., :3].to(
-                            #         device=output_image.device, dtype=output_image.dtype
-                            #     )
-                        else:
-                            preview_filename = original_name
-                            self._set_last_preview(preview_filename)
-                            new_rgbyp_json = ""
-                else:
-                    if not json_available:
-                        preview_name = f"RGBYPBridge-rgbyp-preview-{nodeId}.png"
-                        if downscale_preview_mask_to > 0:
-                            save_preview_image_tensor_to_clipspace(
-                                output_image,
-                                preview_name,
-                                max_side=downscale_preview_mask_to,
-                            )
-                        else:
-                            save_image_tensor_to_clipspace(output_image, preview_name)
-                        # save_preview_image_tensor_to_clipspace(
-                        #     output_image, preview_name, max_side=512
-                        # )
-                        preview_filename = preview_name
-                        self._set_last_preview(preview_filename)
-                        new_rgbyp_json = ""
-                    else:
-                        original_name = f"RGBYPBridge-rgbyp-original-{nodeId}.png"
-                        save_image_tensor_to_clipspace(output_image, original_name)
-                        preview_filename = original_name
-                        self._set_last_preview(preview_filename)
-                        new_rgbyp_json = ""
-
-        # --- ENSURE PREVIEW FILE AND SIZE MATCH SETTINGS ---
-        # Rule:
-        # - If mask exists -> preview must be composite
-        # - If no mask -> preview must be original
-        # And preview file should be downscaled to max_side when downscale_preview_mask_to > 0
-
-        effective_json_available = bool(
-            isinstance(new_rgbyp_json, str) and new_rgbyp_json.strip()
-        )
-        want_preview = preview_filename
-
-        # Decide which file SHOULD be preview
-        if effective_json_available and preview_mask_available:
-            # Prefer composite when mask exists
-            if (
-                isinstance(composite_filename_from_json, str)
-                and composite_filename_from_json
-                and clipspace_exists(composite_filename_from_json)
-            ):
-                want_preview = composite_filename_from_json
-        elif effective_json_available:
-            # No mask -> prefer original
-            if (
-                isinstance(original_filename_from_json, str)
-                and original_filename_from_json
-                and clipspace_exists(original_filename_from_json)
-            ):
-                want_preview = original_filename_from_json
-
-        # Switch preview filename if needed
-        if want_preview and want_preview != preview_filename:
-            preview_filename = want_preview
-            self._set_last_preview(preview_filename)
-
-        # Rebuild preview file if its size doesn't match the current downscale setting
-        if (
-            isinstance(preview_filename, str)
-            and preview_filename
-            and clipspace_exists(preview_filename)
-        ):
-            sz = clipspace_image_size(preview_filename)
-            if sz:
-                prev_w, prev_h = int(sz[0]), int(sz[1])
-
-                max_side = (
-                    int(downscale_preview_mask_to) if downscale_preview_mask_to else 0
-                )
-
-                need_rebuild = False
-                if max_side > 0:
-                    # if prev_w > max_side or prev_h > max_side:
-                    if max(prev_w, prev_h) != max_side:
-                        need_rebuild = True
-                else:
-                    if prev_w != int(inputWidth) or prev_h != int(inputHeight):
-                        need_rebuild = True
-
-                if need_rebuild:
-                    is_composite = (
-                        preview_mask_available
-                        and isinstance(composite_filename_from_json, str)
-                        and composite_filename_from_json
-                        and preview_filename == composite_filename_from_json
-                    )
-
-                    if is_composite:
-                        mask_tensor = _load_image_from_path(
-                            clipspace_path(mask_filename_from_json),
-                            ref_tensor=output_image,
-                        )
-                        composite_tensor = bake_composite_with_mask(
-                            output_image, mask_tensor, opacity=0.7
-                        )
-
-                        if max_side > 0:
-                            save_preview_image_tensor_to_clipspace(
-                                composite_tensor,
-                                preview_filename,
-                                max_side=max_side,
-                            )
-                        else:
-                            save_image_tensor_to_clipspace(
-                                composite_tensor,
-                                preview_filename,
-                            )
-
-                        # rebuild MASK to match current downscale setting too
-                        if isinstance(mask_filename_from_json, str) and mask_filename_from_json:
-                            if max_side > 0:
-                                save_preview_image_tensor_to_clipspace(mask_tensor, mask_filename_from_json, max_side=max_side)
-                            else:
-                                save_image_tensor_to_clipspace(mask_tensor, mask_filename_from_json)
-
-                            # drop cached entry so output reflects new file immediately
-                            try:
-                                self._rgbyp_mask_cache.pop(clipspace_path(mask_filename_from_json), None)
-                            except Exception:
-                                pass
-
-                        # also rebuild ORIGINAL to the same size
-                        if (
-                            isinstance(original_filename_from_json, str)
-                            and original_filename_from_json
-                        ):
-                            if max_side > 0:
-                                save_preview_image_tensor_to_clipspace(
-                                    output_image,
-                                    original_filename_from_json,
-                                    max_side=max_side,
-                                )
-                            else:
-                                save_image_tensor_to_clipspace(
-                                    output_image, original_filename_from_json
-                                )
-
-                    else:
-                        if max_side > 0:
-                            save_preview_image_tensor_to_clipspace(
-                                output_image,
-                                preview_filename,
-                                max_side=max_side,
-                            )
-                        else:
-                            save_image_tensor_to_clipspace(
-                                output_image,
-                                preview_filename,
-                            )
-
-                    self._set_last_preview(preview_filename)
+        preview_image = None
 
         ui = {
             "images": [
@@ -546,10 +195,10 @@ class RGBYPMaskBridge:
                     "type": "input",
                 }
             ],
-            "rgbyp_json": [f"{new_rgbyp_json}"],
+            "rgbyp_json": [f"{rgbyp_json}"],
         }
 
-        return {"result": (output_image, rgbypOutputMask), "ui": ui}
+        return {"result": (output_image, st["mask_cache"]), "ui": ui}
 
 
 NODE_CLASS_MAPPINGS = {"RGBYPMaskBridge": RGBYPMaskBridge}
