@@ -124,25 +124,41 @@ export const HELP = `
  * - Registers only a context-menu entry.
  * - Does NOT load or process any images.
  */
+function hasImagePreview(node) {
+    if (!node || !Array.isArray(node.widgets)) return false;
+
+    return node.widgets.some(w =>
+        w?.type === "image" ||
+        w?.type === "image_upload" ||
+        w?.name === "image" ||
+        w?.name === "loadImage"
+    );
+}
+
+
 app.registerExtension({
     name: "RGBYPMaskEditor",
 
-    // getCanvasMenuItems(canvas) {
-    //     return [
-    //         // ← твои пункты будут в самом верху меню
-    //         {
-    //             content: `
-    //                     <span style="display:flex;align-items:center;gap:6px;">
-    //                     <img src="/extensions/ComfyUI-RGBYP-Mask-Editor/i_menu.png"
-    //                         style="width:16px;height:16px;image-rendering:pixelated;">
-    //                     <span>RGBYP Mask Editor</span>
-    //                     </span>
-    //                     `,
-    //             callback: () => openMaskEditor(node),
-    //         },
-    //         null, // разделитель
-    //     ];
-    // },
+    getNodeMenuItems(node) {
+        
+        const items = [];
+        if (!hasImagePreview(node)) return items;
+        items.push(null);
+        items.push({
+            content: `
+                        <span style="display:flex;align-items:center;gap:6px;">
+                        <img src="/extensions/ComfyUI-RGBYP-Mask-Editor/i_menu.png"
+                            style="width:16px;height:16px;image-rendering:pixelated;">
+                        <span>RGBYP Mask Editor</span>
+                        </span>
+                        `,
+            callback: () => {
+                openMaskEditor(node);
+            }
+        });
+        // null, 
+        return items;
+    },
 
     // onContextMenu: {
     //     nodeMenu(node) {
@@ -196,47 +212,47 @@ app.registerExtension({
     //     return items
     // }
 
-    async setup(appInstance) {
+    // async setup(appInstance) {
 
 
-        const LGraphCanvas = window.LGraphCanvas;
-        if (!LGraphCanvas) return;
+    //     const LGraphCanvas = window.LGraphCanvas;
+    //     if (!LGraphCanvas) return;
 
-        const proto = LGraphCanvas.prototype;
-        const origGetNodeMenuOptions = proto.getNodeMenuOptions;
+    //     const proto = LGraphCanvas.prototype;
+    //     const origGetNodeMenuOptions = proto.getNodeMenuOptions;
 
-        proto.getNodeMenuOptions = function (node) {
-            GP.baseNode = node
+    //     proto.getNodeMenuOptions = function (node) {
+    //         GP.baseNode = node
 
-            // setNodeState(node.id, { baseNode: node });
+    //         // setNodeState(node.id, { baseNode: node });
 
-            let options = [];
-            try {
-                options = origGetNodeMenuOptions
-                    ? origGetNodeMenuOptions.call(this, node) || []
-                    : [];
-            } catch (e) {
-                options = options || [];
-            }
+    //         let options = [];
+    //         try {
+    //             options = origGetNodeMenuOptions
+    //                 ? origGetNodeMenuOptions.call(this, node) || []
+    //                 : [];
+    //         } catch (e) {
+    //             options = options || [];
+    //         }
 
-            // Visual separator
-            options.unshift(null);
+    //         // Visual separator
+    //         options.unshift(null);
 
-            // Simple menu item that only opens the stub dialog
-            options.unshift({
-                content: `
-                    <span style="display:flex;align-items:center;gap:6px;">
-                        <img src="/extensions/ComfyUI-RGBYP-Mask-Editor/i_menu.png"
-                            style="width:16px;height:16px;image-rendering:pixelated;">
-                        <span>RGBYP Mask Editor</span>
-                    </span>
-                    `,
-                callback: () => {
-                    openMaskEditor(node);
-                },
-            });
+    //         // Simple menu item that only opens the stub dialog
+    //         options.unshift({
+    //             content: `
+    //                 <span style="display:flex;align-items:center;gap:6px;">
+    //                     <img src="/extensions/ComfyUI-RGBYP-Mask-Editor/i_menu.png"
+    //                         style="width:16px;height:16px;image-rendering:pixelated;">
+    //                     <span>RGBYP Mask Editor</span>
+    //                 </span>
+    //                 `,
+    //             callback: () => {
+    //                 openMaskEditor(node);
+    //             },
+    //         });
 
-            return options;
-        };
-    },
+    //         return options;
+    //     };
+    // },
 });

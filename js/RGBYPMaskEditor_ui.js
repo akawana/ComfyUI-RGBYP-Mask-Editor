@@ -60,6 +60,7 @@ export function updateToolButtonsHighlight(activeTool) {
  * - Does NOT load or save any images and does not draw.
  */
 export function openMaskEditor(node) {
+    GP.baseNode = node; 
     // overlay
     const overlay = document.createElement("div");
     overlay.style.position = "fixed";
