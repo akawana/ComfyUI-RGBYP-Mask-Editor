@@ -156,8 +156,21 @@ class RGBYPMaskBridge:
         self._set_last_input_fp(new_sig)
 
         # first run after server start: don't trigger the "input changed" branch
+        # if last_sig is None:
+            # isInputImageChanged = False
+
         if last_sig is None:
-            isInputImageChanged = False
+            # Suppress "changed" ONLY if we already have a persisted state (json/files),
+            # otherwise we must write the first preview/original/composite.
+            has_persisted_state = False
+            if json_available and preview_mask_available:
+                has_persisted_state = True
+            elif isinstance(preview_filename, str) and preview_filename and clipspace_exists(preview_filename):
+                has_persisted_state = True
+
+            if has_persisted_state:
+                isInputImageChanged = False
+
 
         # isInputImageChanged, new_fp = is_input_image_changed_variantA(
         #     self._get_last_input_fp(), image
