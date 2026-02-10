@@ -271,3 +271,60 @@ def _rgbyp_mask_to_regular_mask(rgbyp_mask, device=None):
     if device is not None:
         return _make_black_mask_64(device)
     return None
+
+
+def is_image_changed(prev_sig, image: torch.Tensor, grid: int = 12):
+    """
+    Cheap content-aware change detector for IMAGE tensor (1,H,W,C).
+
+    Returns:
+      (is_changed: bool, new_sig)
+
+    Notes:
+      - Works even if upstream reuses the same buffer (data_ptr unchanged).
+      - Uses a small sampled grid (grid x grid) from RGB channels and a few aggregates.
+      - Does NOT hash the whole image.
+    """
+    if image is None or not isinstance(image, torch.Tensor):
+        return True, None
+    if image.dim() != 4 or image.shape[0] != 1:
+        return True, None
+
+    try:
+        _, h, w, c = image.shape
+        h = int(h); w = int(w); c = int(c)
+    except Exception:
+        return True, None
+
+    cc = 3 if c >= 3 else c
+    if cc <= 0:
+        return True, None
+
+    # Detach + CPU float32 for stable signature
+    t = image.detach()
+    if t.device.type != "cpu":
+        t = t.to("cpu")
+    t = t.float().clamp(0.0, 1.0)[0, :, :, :cc]  # (H,W,cc)
+
+    g = int(grid) if grid else 12
+    if g < 2:
+        g = 2
+
+    ys = torch.linspace(0, h - 1, steps=g).round().long().clamp(0, h - 1)
+    xs = torch.linspace(0, w - 1, steps=g).round().long().clamp(0, w - 1)
+
+    samp = t.index_select(0, ys).index_select(1, xs)  # (g,g,cc)
+    q = (samp * 255.0).round().clamp(0.0, 255.0).to(torch.int16)
+
+    # Aggregates
+    s0 = int(q.sum().item())
+    s1 = int(q[:, :, 0].sum().item()) if cc >= 1 else 0
+    s2 = int(q[:, :, 1].sum().item()) if cc >= 2 else 0
+    s3 = int(q[:, :, 2].sum().item()) if cc >= 3 else 0
+
+    # Mixed checksum
+    flat0 = q[:, :, 0].reshape(-1).to(torch.int32) if cc >= 1 else None
+    if flat0 is not None:
+        w1 = torch.arange(1, flat0.shape[0] + 1, dtype=torch.int32)
+        mix0 = int((flat0 * w1).sum().item())
+    else:
