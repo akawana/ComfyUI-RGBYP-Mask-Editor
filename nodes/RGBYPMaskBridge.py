@@ -11,7 +11,7 @@ from .RGBYPUtils import (
     save_image_tensor_to_clipspace,
     bake_composite_with_mask,
     clipspace_path,
-    is_input_image_changed_variantA,
+    is_image_changed,
 )
 
 
@@ -107,7 +107,7 @@ class RGBYPMaskBridge:
             st = {
                 "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
                 "previousTimestamp": 0,
-                "prev_input_fp": None,
+                "prev_input_sig": None,
             }
             self._state[uid] = st
         else:
@@ -130,8 +130,8 @@ class RGBYPMaskBridge:
 
         st = self._get_state(unique_id, image)
 
-        input_changed, new_fp = is_input_image_changed_variantA(st.get("prev_input_fp"), image)
-        st["prev_input_fp"] = new_fp
+        input_changed, new_sig = is_image_changed(st.get("prev_input_sig"), image)
+        st["prev_input_sig"] = new_sig
 
         rgbyp_json_available = bool(rgbyp_json and str(rgbyp_json).strip())
 
