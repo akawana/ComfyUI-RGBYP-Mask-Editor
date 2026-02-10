@@ -125,14 +125,27 @@ export const HELP = `
  * - Does NOT load or process any images.
  */
 function hasImagePreview(node) {
-    if (!node || !Array.isArray(node.widgets)) return false;
+    if (!node) return false;
 
-    return node.widgets.some(w =>
-        w?.type === "image" ||
-        w?.type === "image_upload" ||
-        w?.name === "image" ||
-        w?.name === "loadImage"
-    );
+    // 1) Widget-based preview
+    if (Array.isArray(node.widgets)) {
+        const hasWidgetPreview = node.widgets.some(w =>
+            w?.type === "image" ||
+            w?.type === "image_upload" ||
+            w?.name === "image" ||
+            w?.name === "loadImage"
+        );
+        if (hasWidgetPreview) return true;
+    }
+
+    // 2) Python ui.images preview (non-widget)
+    const ui = node._ui || node.ui;
+    if (ui && Array.isArray(ui.images) && ui.images.length > 0) {
+        const img = ui.images[0];
+        if (img?.filename) return true;
+    }
+
+    return false;
 }
 
 
