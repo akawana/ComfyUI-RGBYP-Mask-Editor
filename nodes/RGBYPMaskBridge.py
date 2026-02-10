@@ -99,12 +99,16 @@ class RGBYPMaskBridge:
 
     _state: Dict[str, Dict[str, Any]] = {}
 
-    def _get_state(self, unique_id: Optional[str], image: torch.Tensor) -> Dict[str, Any]:
+    def _get_state(
+        self, unique_id: Optional[str], image: torch.Tensor
+    ) -> Dict[str, Any]:
         uid = str(unique_id) if unique_id is not None else "none"
         st = self._state.get(uid)
         if st is None:
             st = {
-                "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
+                "mask_cache": _make_black_64(
+                    device=str(image.device), dtype=image.dtype
+                ),
                 "previousTimestamp": 0,
             }
             self._state[uid] = st
@@ -124,36 +128,6 @@ class RGBYPMaskBridge:
         rgbyp_json="",
         unique_id=None,
     ):
-<<<<<<< HEAD
-=======
-        if unique_id is None:
-            unique_id = "0"
-
-        _, inputHeight, inputWidth, _ = image.shape
-
-        json_available = False
-        json_obj = None
-        preview_mask_available = False
-        preview_filename = None
-
-        last_fp = self._get_last_input_fp()
-        isInputImageChanged, new_fp = is_input_image_changed_variantA(last_fp, image)
-        self._set_last_input_fp(new_fp)
-
-        # if last_fp is None:
-        #     isInputImageChanged = False
-
-        # first run after server start: don't trigger the "input changed" branch
-        # if last_sig is None:
-            # isInputImageChanged = False
-
-
-        # isInputImageChanged, new_fp = is_input_image_changed_variantA(
-        #     self._get_last_input_fp(), image
-        # )
-        # self._set_last_input_fp(new_fp)
-
->>>>>>> fa56a2e527980619fcd9d9ec65a6ccc1b9be50c6
         output_image = image
 
         st = self._get_state(unique_id, image)
@@ -162,7 +136,9 @@ class RGBYPMaskBridge:
 
         if not rgbyp_json_available:
             if not _is_mask_64x64(st.get("mask_cache")):
-                st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
+                st["mask_cache"] = _make_black_64(
+                    device=str(image.device), dtype=image.dtype
+                )
             if int(st.get("previousTimestamp", 0) or 0) != 0:
                 st["previousTimestamp"] = 0
 
@@ -194,7 +170,9 @@ class RGBYPMaskBridge:
             preview_image = _downscale_tensor_max_side(image, int(downscale_preview_to))
 
         original_filename = f"rgbyp-original-{unique_id}.png"
-        saved_original = save_image_tensor_to_clipspace(preview_image, original_filename, max_side=0)
+        saved_original = save_image_tensor_to_clipspace(
+            preview_image, original_filename, max_side=0
+        )
         original_filename = saved_original or ""
 
         preview_filename = original_filename
@@ -207,12 +185,16 @@ class RGBYPMaskBridge:
                 mask_tensor = _load_image_from_path(mp, ref_tensor=image)
 
             if isinstance(mask_tensor, torch.Tensor):
-                st["mask_cache"] = mask_tensor.to(device=image.device, dtype=image.dtype)
+                st["mask_cache"] = mask_tensor.to(
+                    device=image.device, dtype=image.dtype
+                )
 
             comp = bake_composite_with_mask(preview_image, st["mask_cache"])
             if isinstance(comp, torch.Tensor):
                 composite_filename = f"rgbyp-composite-{unique_id}.png"
-                saved_comp = save_image_tensor_to_clipspace(comp, composite_filename, max_side=0)
+                saved_comp = save_image_tensor_to_clipspace(
+                    comp, composite_filename, max_side=0
+                )
                 preview_filename = saved_comp or preview_filename
 
         preview_image = None
