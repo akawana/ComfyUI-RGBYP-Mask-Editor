@@ -11,6 +11,7 @@ from .RGBYPUtils import (
     save_image_tensor_to_clipspace,
     bake_composite_with_mask,
     clipspace_path,
+    is_input_image_changed_variantA,
 )
 
 
@@ -90,7 +91,7 @@ class RGBYPMaskBridge:
             },
         }
 
-    DESCRIPTION = "Pass-through image + cached RGBYP mask; maintains a clipspace preview (original or composite) based on JSON timestamp."
+    DESCRIPTION = "Pass-through image + cached RGBYP mask; updates preview on input changes."
     CATEGORY = "AK/RGBYP"
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image", "rgbyp_mask")
@@ -99,17 +100,14 @@ class RGBYPMaskBridge:
 
     _state: Dict[str, Dict[str, Any]] = {}
 
-    def _get_state(
-        self, unique_id: Optional[str], image: torch.Tensor
-    ) -> Dict[str, Any]:
+    def _get_state(self, unique_id: Optional[str], image: torch.Tensor) -> Dict[str, Any]:
         uid = str(unique_id) if unique_id is not None else "none"
         st = self._state.get(uid)
         if st is None:
             st = {
-                "mask_cache": _make_black_64(
-                    device=str(image.device), dtype=image.dtype
-                ),
+                "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
                 "previousTimestamp": 0,
+                "prev_input_fp": None,
             }
             self._state[uid] = st
         else:
@@ -132,18 +130,12 @@ class RGBYPMaskBridge:
 
         st = self._get_state(unique_id, image)
 
+        input_changed, new_fp = is_input_image_changed_variantA(st.get("prev_input_fp"), image)
+        st["prev_input_fp"] = new_fp
+
         rgbyp_json_available = bool(rgbyp_json and str(rgbyp_json).strip())
 
-        if not rgbyp_json_available:
-            if not _is_mask_64x64(st.get("mask_cache")):
-                st["mask_cache"] = _make_black_64(
-                    device=str(image.device), dtype=image.dtype
-                )
-            if int(st.get("previousTimestamp", 0) or 0) != 0:
-                st["previousTimestamp"] = 0
-
         previousTimestamp = int(st.get("previousTimestamp", 0) or 0)
-        maskChanged = False
 
         parsed = None
         if rgbyp_json_available:
@@ -152,7 +144,8 @@ class RGBYPMaskBridge:
             except Exception:
                 parsed = None
 
-        if isinstance(parsed, dict):
+        mask_temp = None
+        if rgbyp_json_available and isinstance(parsed, dict):
             ts = parsed.get("rgbyp_timestamp", 0)
             try:
                 ts_int = int(ts)
@@ -160,24 +153,30 @@ class RGBYPMaskBridge:
                 ts_int = 0
 
             if ts_int != previousTimestamp:
-                maskChanged = True
+                mask_name = parsed.get("mask", "")
+                if isinstance(mask_name, str) and mask_name.strip():
+                    mp = clipspace_path(mask_name.strip())
+                    mask_temp = _load_image_from_path(mp, ref_tensor=image)
+                    if isinstance(mask_temp, torch.Tensor):
+                        st["mask_cache"] = mask_temp.to(device=image.device, dtype=image.dtype)
 
-            previousTimestamp = ts_int
-            st["previousTimestamp"] = previousTimestamp
+            st["previousTimestamp"] = ts_int
+
+        if not rgbyp_json_available:
+            if not _is_mask_64x64(st.get("mask_cache")):
+                st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
+            st["previousTimestamp"] = 0
 
         preview_image = image
         if isinstance(downscale_preview_to, int) and downscale_preview_to > 0:
             preview_image = _downscale_tensor_max_side(image, int(downscale_preview_to))
 
-        original_filename = f"rgbyp-original-{unique_id}.png"
-        saved_original = save_image_tensor_to_clipspace(
-            preview_image, original_filename, max_side=0
-        )
+        original_filename = f"RGBYPBridge-rgbyp-original-{unique_id}.png"
+        saved_original = save_image_tensor_to_clipspace(preview_image, original_filename, max_side=0)
         original_filename = saved_original or ""
 
-        preview_filename = original_filename
-
-        if maskChanged and isinstance(parsed, dict):
+        preview_filename = ""
+        if input_changed and rgbyp_json_available and isinstance(parsed, dict):
             mask_name = parsed.get("mask", "")
             mask_tensor = None
             if isinstance(mask_name, str) and mask_name.strip():
@@ -185,19 +184,21 @@ class RGBYPMaskBridge:
                 mask_tensor = _load_image_from_path(mp, ref_tensor=image)
 
             if isinstance(mask_tensor, torch.Tensor):
-                st["mask_cache"] = mask_tensor.to(
-                    device=image.device, dtype=image.dtype
-                )
+                st["mask_cache"] = mask_tensor.to(device=image.device, dtype=image.dtype)
 
             comp = bake_composite_with_mask(preview_image, st["mask_cache"])
             if isinstance(comp, torch.Tensor):
-                composite_filename = f"rgbyp-composite-{unique_id}.png"
-                saved_comp = save_image_tensor_to_clipspace(
-                    comp, composite_filename, max_side=0
-                )
-                preview_filename = saved_comp or preview_filename
+                composite_filename = f"RGBYPBridge-rgbyp-composite-{unique_id}.png"
+                saved_comp = save_image_tensor_to_clipspace(comp, composite_filename, max_side=0)
+                preview_filename = saved_comp or ""
+            if not preview_filename:
+                preview_filename = original_filename
+
+        elif input_changed and (not rgbyp_json_available):
+            preview_filename = original_filename
 
         preview_image = None
+        mask_temp = None
 
         ui = {
             "images": [
@@ -207,7 +208,7 @@ class RGBYPMaskBridge:
                     "type": "input",
                 }
             ],
-            "rgbyp_json": [f"{rgbyp_json}"],
+            "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
         }
 
         return {"result": (output_image, st["mask_cache"]), "ui": ui}

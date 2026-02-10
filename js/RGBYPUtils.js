@@ -456,13 +456,13 @@ import {
         const isBridgeNode = nodeType === "RGBYPMaskBridge";
         const isLoadImageNode = nodeType === "RGBYPLoadImage";
 
-        if (isBridgeNode) {
-            updateWidgetValue(node, "rgbyp_json", "", true);
-            runPartialExecutionForNode(node);
-            return;
-        }
+        // if (isBridgeNode) {
+        //     updateWidgetValue(node, "rgbyp_json", "", true);
+        //     runPartialExecutionForNode(node);
+        //     return;
+        // }
 
-        if (isLoadImageNode) {
+        // if (isLoadImageNode) {
             // read json (do NOT use getWidgetJSON(), it is strict)
             const raw = getWidgetValue(node, "rgbyp_json");
             if (!raw) return;
@@ -492,9 +492,9 @@ import {
             // clear json at the end
             updateWidgetValue(node, "rgbyp_json", "", true);
 
-            runPartialExecutionForNode(node);
+            // runPartialExecutionForNode(node);
             return;
-        }
+        // }
     }
 
     const BUTTON_H = 26;
