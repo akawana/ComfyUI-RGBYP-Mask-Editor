@@ -267,9 +267,9 @@ import {
                 const x2 = pad + bw + gap;
 
                 // Load Mask button
-                ctx.fillStyle = "#425741";
+                ctx.fillStyle = "#223420";
                 ctx.fillRect(x1, y, bw, h);
-                ctx.strokeStyle = "#6d7f6c";
+                ctx.strokeStyle = "#456a40";
                 // ctx.lineWidth = 1;
                 ctx.strokeRect(x1 + 0.5, y + 0.5, bw - 1, h - 1);
 
@@ -281,9 +281,9 @@ import {
                 ctx.fillText("Load Mask", x1 + bw / 2, y + h / 2);
 
                 // Reset Mask button
-                ctx.fillStyle = "#584444";
+                ctx.fillStyle = "#342020";
                 ctx.fillRect(x2, y, bw, h);
-                ctx.strokeStyle = "#7f6767";
+                ctx.strokeStyle = "#6a4040";
                 // ctx.lineWidth = 1;
                 ctx.strokeRect(x2 + 0.5, y + 0.5, bw - 1, h - 1);
 
