@@ -145,6 +145,11 @@ class RGBYPMaskBridge:
 
         _, inputHeight, inputWidth, _ = image.shape
 
+        json_available = False
+        json_obj = None
+        preview_mask_available = False
+        preview_filename = None
+
         # last_fp = self._get_last_input_fp()
         # isInputImageChanged, new_fp = is_input_image_changed_variantA(last_fp, image)
         # self._set_last_input_fp(new_fp)
@@ -171,6 +176,8 @@ class RGBYPMaskBridge:
             if has_persisted_state:
                 isInputImageChanged = False
 
+        if last_sig is None and preview_available:
+            isInputImageChanged = False
 
         # isInputImageChanged, new_fp = is_input_image_changed_variantA(
         #     self._get_last_input_fp(), image
@@ -180,8 +187,6 @@ class RGBYPMaskBridge:
         output_image = image
         rgbypOutputMask = _make_black_64(device=image.device, dtype=image.dtype)
 
-        json_available = False
-        json_obj = None
         if isinstance(rgbyp_json, str) and rgbyp_json.strip():
             try:
                 json_obj = json.loads(rgbyp_json)
@@ -201,7 +206,6 @@ class RGBYPMaskBridge:
 
         new_rgbyp_json = rgbyp_json if isinstance(rgbyp_json, str) else ""
 
-        preview_filename = None
         if (
             isinstance(composite_filename_from_json, str)
             and composite_filename_from_json
