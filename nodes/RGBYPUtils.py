@@ -328,3 +328,24 @@ def is_image_changed(prev_sig, image: torch.Tensor, grid: int = 12):
         w1 = torch.arange(1, flat0.shape[0] + 1, dtype=torch.int32)
         mix0 = int((flat0 * w1).sum().item())
     else:
+        mix0 = 0
+
+    # Meta to avoid collisions across different tensors
+    try:
+        shape = tuple(int(x) for x in image.shape)
+    except Exception:
+        shape = None
+    try:
+        dtype = str(image.dtype)
+    except Exception:
+        dtype = None
+    try:
+        device = str(image.device)
+    except Exception:
+        device = None
+
+    new_sig = (shape, dtype, device, g, s0, s1, s2, s3, mix0)
+
+    if prev_sig is None:
+        return True, new_sig
+    return (new_sig != prev_sig), new_sig
