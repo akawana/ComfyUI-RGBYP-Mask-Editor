@@ -150,15 +150,12 @@ class RGBYPMaskBridge:
         preview_mask_available = False
         preview_filename = None
 
-        # last_fp = self._get_last_input_fp()
-        # isInputImageChanged, new_fp = is_input_image_changed_variantA(last_fp, image)
-        # self._set_last_input_fp(new_fp)
+        last_fp = self._get_last_input_fp()
+        isInputImageChanged, new_fp = is_input_image_changed_variantA(last_fp, image)
+        self._set_last_input_fp(new_fp)
 
         # if last_fp is None:
         #     isInputImageChanged = False
-        last_sig = self._get_last_input_fp()
-        isInputImageChanged, new_sig = is_image_changed(last_sig, image, grid=12)
-        self._set_last_input_fp(new_sig)
 
         # first run after server start: don't trigger the "input changed" branch
         # if last_sig is None:

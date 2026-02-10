@@ -136,15 +136,39 @@ export function initBaseImageAndCanvas() {
             state.rgbypHadJsonOnOpen = false;
         }
 
+        // if (!baseImg) {
+        //     try {
+        //         baseImg = await loadImageFromUrl(withCacheBust(fallbackSrc));
+        //     } catch (e) {
+        //         console.error("[RGBYP] Failed to load image from node src", fallbackSrc, e);
+        //         return;
+        //     }
+        // }
+
         if (!baseImg) {
-            try {
-                baseImg = await loadImageFromUrl(withCacheBust(fallbackSrc));
-            } catch (e) {
-                console.error("[RGBYP] Failed to load image from node src", fallbackSrc, e);
-                return;
+            // Variant 1: use already-loaded preview image from node memory (no disk/network)
+            if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0) {
+                const memImg = node.imgs[0];
+                const w = memImg?.naturalWidth || memImg?.width || 0;
+                const h = memImg?.naturalHeight || memImg?.height || 0;
+
+                if (memImg instanceof Image && w > 0 && h > 0) {
+                    console.log("[RGBYP] initBaseImageAndCanvas: using node.imgs[0] from memory", { w, h });
+                    baseImg = memImg;
+                }
+            }
+
+            // Fallback: load via URL
+            if (!baseImg) {
+                try {
+                    console.log("[RGBYP] initBaseImageAndCanvas: loading base from URL", fallbackSrc);
+                    baseImg = await loadImageFromUrl(withCacheBust(fallbackSrc));
+                } catch (e) {
+                    console.error("[RGBYP] Failed to load image from node src", fallbackSrc, e);
+                    return;
+                }
             }
         }
-
         state.baseImg = baseImg;
         state.maskImg = maskImg || null;
 
@@ -174,7 +198,7 @@ export function initBaseImageAndCanvas() {
         const mctx = state.maskCanvas.getContext("2d");
         mctx.clearRect(0, 0, imgW, imgH);
         // if (maskImg) {
-            // mctx.drawImage(maskImg, 0, 0);
+        // mctx.drawImage(maskImg, 0, 0);
         // }
         if (maskImg) {
             mctx.drawImage(maskImg, 0, 0, imgW, imgH);
@@ -371,6 +395,6 @@ export function fitImageToPanel(state) {
     state.zoom = 1;
 
     panel.scrollLeft = Math.max(0, (container.scrollWidth - boxW) / 2);
-    panel.scrollTop  = Math.max(0, (container.scrollHeight - boxH) / 2);
+    panel.scrollTop = Math.max(0, (container.scrollHeight - boxH) / 2);
 }
 
