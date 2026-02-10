@@ -279,14 +279,30 @@ class RGBYPMaskBridge:
                 self._set_last_preview(preview_filename)
             else:
                 if preview_available:
+                    # sz = clipspace_image_size(preview_filename)
+                    # sizeMatch = False
+                    # if sz:
+                    #     previousWidth, previousHeight = int(sz[0]), int(sz[1])
+                    #     sizeMatch = (previousWidth == int(inputWidth)) and (
+                    #         previousHeight == int(inputHeight)
+                    #     )
+
                     sz = clipspace_image_size(preview_filename)
                     sizeMatch = False
                     if sz:
                         previousWidth, previousHeight = int(sz[0]), int(sz[1])
-                        sizeMatch = (previousWidth == int(inputWidth)) and (
-                            previousHeight == int(inputHeight)
-                        )
 
+                        ms = int(downscale_preview_mask_to or 0)
+                        if ms > 0:
+                            # expected preview size is "fit max side to ms" while keeping aspect
+                            mx = max(int(inputWidth), int(inputHeight))
+                            if mx > 0:
+                                scale = float(ms) / float(mx) if mx > ms else 1.0
+                                expW = max(1, int(round(int(inputWidth) * scale)))
+                                expH = max(1, int(round(int(inputHeight) * scale)))
+                                sizeMatch = (previousWidth == expW) and (previousHeight == expH)
+                        else:
+                            sizeMatch = (previousWidth == int(inputWidth)) and (previousHeight == int(inputHeight))
                     original_name = f"RGBYPBridge-rgbyp-original-{nodeId}.png"
                     save_image_tensor_to_clipspace(output_image, original_name)
 
