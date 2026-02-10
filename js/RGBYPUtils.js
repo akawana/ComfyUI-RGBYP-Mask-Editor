@@ -230,118 +230,6 @@ import {
 
     }
 
-    function installButtons(node) {
-        if (node.__rgbyp_buttons_installed) return;
-        node.__rgbyp_buttons_installed = true;
-
-        const row = {
-            type: "rgbyp_button_row",
-            name: "rgbyp_button_row",
-            serialize: false,
-
-            _padX: 15,   // left/right padding inside the node
-            _gap: 4,    // gap between buttons
-            _h: 22,     // row height
-
-            _lastY: 0,
-            _lastW: 0,
-            _lastH: 0,
-
-            computeSize(width) {
-                return [width, this._h];
-            },
-
-            draw(ctx, node, width, y) {
-                const h = this._h;
-                const pad = this._padX;
-                const gap = this._gap;
-
-                this._lastY = y;
-                this._lastW = width;
-                this._lastH = h;
-
-                const innerW = Math.max(10, width - pad * 2);
-                const bw = Math.max(10, Math.floor((innerW - gap) / 2));
-
-                const x1 = pad;
-                const x2 = pad + bw + gap;
-
-                // Load Mask button
-                ctx.fillStyle = "#223420";
-                ctx.fillRect(x1, y, bw, h);
-                ctx.strokeStyle = "#456a40";
-                // ctx.lineWidth = 1;
-                ctx.strokeRect(x1 + 0.5, y + 0.5, bw - 1, h - 1);
-
-                ctx.fillStyle = "#ffffff";
-                ctx.textAlign = "center";
-                // console.log("textBaseline", ctx.textBaseline);
-                ctx.textBaseline = "middle";
-                // ctx.font = "14px sans-serif";
-                ctx.fillText("Load Mask", x1 + bw / 2, y + h / 2);
-
-                // Reset Mask button
-                ctx.fillStyle = "#342020";
-                ctx.fillRect(x2, y, bw, h);
-                ctx.strokeStyle = "#6a4040";
-                // ctx.lineWidth = 1;
-                ctx.strokeRect(x2 + 0.5, y + 0.5, bw - 1, h - 1);
-
-                ctx.fillStyle = "#ffffff";
-                ctx.fillText("Reset Mask", x2 + bw / 2, y + h / 2);
-
-                ctx.textBaseline = "alphabetic";
-
-            },
-
-            mouse(e, pos, node) {
-                if (e.type !== "pointerdown" && e.type !== "mousedown") return false;
-
-                const x = pos[0];
-                const y = pos[1];
-
-                const top = this._lastY;
-                const h = this._h;
-                if (y < top || y > top + h) return false;
-
-                const pad = this._padX, gap = this._gap, w = node.size?.[0] ?? 0;
-                const innerW = Math.max(10, w - pad * 2);
-                const bw = Math.max(10, Math.floor((innerW - gap) / 2));
-                const x1 = pad, x2 = pad + bw + gap;
-
-                if (x >= x1 && x <= x1 + bw) { handleLoadMask(node).catch(err => rgbypErr("handleLoadMask error", err)); return true; }
-                if (x >= x2 && x <= x2 + bw) { handleResetMask(node).catch(err => rgbypErr("handleResetMask error", err)); return true; }
-                return false;
-            }
-        };
-
-        node.widgets = node.widgets || [];
-        // node.widgets.push(row);
-        // const idxJson = node.widgets.findIndex(w => w && w.name === "rgbyp_json");
-        // const insertAt = idxJson >= 0 ? idxJson : node.widgets.length;
-
-        node.widgets.splice(3, 0, row);
-
-        // if (!node.__rgbyp_row_mouse_hooked) {
-        //     node.__rgbyp_row_mouse_hooked = true;
-
-        //     const old = node.onMouseDown;
-        //     node.onMouseDown = function (e, pos, canvas) {
-        //         const w = (this.widgets || []).find(w => w && w.type === "rgbyp_button_row");
-        //         if (w && typeof w.mouse === "function") {
-        //             const r = w.mouse(e, pos, this);
-        //             if (r) return true;
-        //         }
-        //         if (old) return old.call(this, e, pos, canvas);
-        //         return false;
-        //     };
-        // }
-
-
-        node.setSize?.(node.computeSize?.() ?? node.size);
-        node.graph?.setDirtyCanvas(true, true);
-    }
-
     const BUTTON_H = 26;
     const BUTTON_PAD_X = 10;
     const BUTTON_GAP = 6;
@@ -365,9 +253,9 @@ import {
         const h = node.size?.[1] ?? 0;
 
         // const y = h - BUTTON_H - BUTTON_MARGIN;
-        const y = BUTTON_MARGIN;              // самый верх внутри ноды
+        const y = BUTTON_MARGIN;              
 
-        const bw = 34;                // фикс ширина кнопки
+        const bw = 34;                
         const total = bw * 2 + BUTTON_GAP;
 
         const x1 = Math.max(0, Math.floor((w - total) / 2));
@@ -379,13 +267,13 @@ import {
         };
     }
 
-    function drawIconButton(ctx, rect, img, enabled) {
+    function drawIconButton(ctx, rect, img, enabled, bgColor = "#2a2a2a", stColor = "#555") {
         const alpha = enabled ? 1.0 : 0.45;
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = "#2a2a2a";
-        ctx.strokeStyle = "#555";
+        ctx.fillStyle = bgColor;
+        ctx.strokeStyle = stColor;
         ctx.lineWidth = 1;
 
         const rr = 6;
@@ -428,8 +316,8 @@ import {
             const rects = _rgbypCalcButtonRects(this);
             this.__rgbyp_icon_rects = rects;
 
-            drawIconButton(ctx, rects.open, NODE_ICONS.open, true);
-            drawIconButton(ctx, rects.reset, NODE_ICONS.reset, true);
+            drawIconButton(ctx, rects.open, NODE_ICONS.open, true, "#223420", "#456a40");
+            drawIconButton(ctx, rects.reset, NODE_ICONS.reset, true, "#342020", "#6a4040");
         };
 
         // --- HIT TEST ---
@@ -471,7 +359,6 @@ import {
             return oldMD ? oldMD.call(this, e, pos, canvas) : false;
         };
 
-        // гарантируем место под кнопки
         const minH = BUTTON_H + BUTTON_MARGIN * 2 + 8;
         if ((node.size?.[1] ?? 0) < minH) node.size[1] = minH;
 
