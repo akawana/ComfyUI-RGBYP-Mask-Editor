@@ -200,6 +200,20 @@ class RGBYPMaskBridge:
                 preview_filename = last_prev
 
         preview_available = bool(preview_filename)
+        if (not preview_available) and (not json_available):
+            nodeId = str(unique_id)
+            preview_name = f"RGBYPBridge-rgbyp-original-{nodeId}.png"
+
+            if int(downscale_preview_mask_to or 0) > 0:
+                save_preview_image_tensor_to_clipspace(
+                    output_image, preview_name, int(downscale_preview_mask_to)
+                )
+            else:
+                save_image_tensor_to_clipspace(output_image, preview_name)
+
+            preview_filename = preview_name
+            preview_available = True
+            self._set_last_preview(preview_name)        
 
         preview_mask_available = False
         if (
