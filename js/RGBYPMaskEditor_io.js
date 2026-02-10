@@ -85,6 +85,45 @@ function canvasToBlob(canvas, mime = "image/png", quality) {
     });
 }
 
+async function loadBaseImg(node) {
+    let baseImg = null;
+    if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0) {
+        const memImg = node.imgs[0];
+        const w = memImg?.naturalWidth || memImg?.width || 0;
+        const h = memImg?.naturalHeight || memImg?.height || 0;
+
+        if (memImg instanceof Image && w > 0 && h > 0) {
+            try {
+                const c = document.createElement("canvas");
+                c.width = w;
+                c.height = h;
+                const cx = c.getContext("2d");
+                cx.drawImage(memImg, 0, 0);
+
+                // Use existing helper from this file (it is already defined above):
+                // async function canvasToBlob(canvas, mime, quality) { ... }
+                const blob = await canvasToBlob(c, "image/png", 1.0);
+
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                    img.onload = () => resolve(true);
+                    img.onerror = (e) => reject(e);
+                    img.src = url;
+                });
+                URL.revokeObjectURL(url);
+
+                console.log("[RGBYP] initBaseImageAndCanvas: cloned node.imgs[0] into new Image", { w, h });
+                baseImg = img;
+            } catch (e) {
+                console.warn("[RGBYP] initBaseImageAndCanvas: clone from node.imgs[0] failed, fallback to URL", e);
+            }
+        }
+    }
+    return baseImg;
+}
+
+
 export function initBaseImageAndCanvas() {
     const node = GP.baseNode;
     const state = node ? getNodeState(node.id) : null;
@@ -114,7 +153,7 @@ export function initBaseImageAndCanvas() {
 
         if (rgbypJson) {
             try {
-                baseImg = await loadClipspaceImage(rgbypJson.original);
+                baseImg = await loadBaseImg(node);
             } catch (_) {
                 baseImg = null;
             }
@@ -145,30 +184,9 @@ export function initBaseImageAndCanvas() {
         //     }
         // }
 
-        if (!baseImg) {
-            // Variant 1: use already-loaded preview image from node memory (no disk/network)
-            if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0) {
-                const memImg = node.imgs[0];
-                const w = memImg?.naturalWidth || memImg?.width || 0;
-                const h = memImg?.naturalHeight || memImg?.height || 0;
+        if (!baseImg) 
+            baseImg = await loadBaseImg(node);
 
-                if (memImg instanceof Image && w > 0 && h > 0) {
-                    console.log("[RGBYP] initBaseImageAndCanvas: using node.imgs[0] from memory", { w, h });
-                    baseImg = memImg;
-                }
-            }
-
-            // Fallback: load via URL
-            if (!baseImg) {
-                try {
-                    console.log("[RGBYP] initBaseImageAndCanvas: loading base from URL", fallbackSrc);
-                    baseImg = await loadImageFromUrl(withCacheBust(fallbackSrc));
-                } catch (e) {
-                    console.error("[RGBYP] Failed to load image from node src", fallbackSrc, e);
-                    return;
-                }
-            }
-        }
         state.baseImg = baseImg;
         state.maskImg = maskImg || null;
 
