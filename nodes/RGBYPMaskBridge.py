@@ -124,6 +124,36 @@ class RGBYPMaskBridge:
         rgbyp_json="",
         unique_id=None,
     ):
+<<<<<<< HEAD
+=======
+        if unique_id is None:
+            unique_id = "0"
+
+        _, inputHeight, inputWidth, _ = image.shape
+
+        json_available = False
+        json_obj = None
+        preview_mask_available = False
+        preview_filename = None
+
+        last_fp = self._get_last_input_fp()
+        isInputImageChanged, new_fp = is_input_image_changed_variantA(last_fp, image)
+        self._set_last_input_fp(new_fp)
+
+        # if last_fp is None:
+        #     isInputImageChanged = False
+
+        # first run after server start: don't trigger the "input changed" branch
+        # if last_sig is None:
+            # isInputImageChanged = False
+
+
+        # isInputImageChanged, new_fp = is_input_image_changed_variantA(
+        #     self._get_last_input_fp(), image
+        # )
+        # self._set_last_input_fp(new_fp)
+
+>>>>>>> fa56a2e527980619fcd9d9ec65a6ccc1b9be50c6
         output_image = image
 
         st = self._get_state(unique_id, image)
