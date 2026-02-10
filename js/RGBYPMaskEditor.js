@@ -127,23 +127,27 @@ export const HELP = `
 function hasImagePreview(node) {
     if (!node) return false;
 
-    // 1) Widget-based preview
+    // 1) Widget-based preview (LoadImage / image widget)
     if (Array.isArray(node.widgets)) {
-        const hasWidgetPreview = node.widgets.some(w =>
+        const ok = node.widgets.some(w =>
             w?.type === "image" ||
             w?.type === "image_upload" ||
             w?.name === "image" ||
             w?.name === "loadImage"
         );
-        if (hasWidgetPreview) return true;
+        if (ok) return true;
     }
 
-    // 2) Python ui.images preview (non-widget)
-    const ui = node._ui || node.ui;
-    if (ui && Array.isArray(ui.images) && ui.images.length > 0) {
-        const img = ui.images[0];
-        if (img?.filename) return true;
+    // 2) Python ui.images preview -> frontend stores it in node.imgs
+    if (Array.isArray(node.imgs) && node.imgs.length > 0) {
+        // imgs usually contains HTMLImageElement(s)
+        const img0 = node.imgs[0];
+        if (img0 && (img0.src || img0.complete || img0.width || img0.height)) return true;
+        return true; // even without src, presence means preview slot exists
     }
+
+    // 3) Some forks store it as node.images
+    if (Array.isArray(node.images) && node.images.length > 0) return true;
 
     return false;
 }
