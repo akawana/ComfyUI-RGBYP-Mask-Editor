@@ -153,7 +153,7 @@ export function initBaseImageAndCanvas() {
 
         if (rgbypJson) {
             try {
-                baseImg = await loadBaseImg(node);
+                baseImg = await loadClipspaceImage(rgbypJson.original);
             } catch (_) {
                 baseImg = null;
             }

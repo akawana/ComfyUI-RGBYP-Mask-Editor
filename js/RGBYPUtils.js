@@ -92,6 +92,143 @@ import {
             }, 0);
         });
     }
+    async function loadBaseImg(node) {
+        let baseImg = null;
+        if (node.imgs && Array.isArray(node.imgs) && node.imgs.length > 0) {
+            const memImg = node.imgs[0];
+            const w = memImg?.naturalWidth || memImg?.width || 0;
+            const h = memImg?.naturalHeight || memImg?.height || 0;
+
+            if (memImg instanceof Image && w > 0 && h > 0) {
+                try {
+                    const c = document.createElement("canvas");
+                    c.width = w;
+                    c.height = h;
+                    const cx = c.getContext("2d");
+                    cx.drawImage(memImg, 0, 0);
+
+                    // Use existing helper from this file (it is already defined above):
+                    // async function canvasToBlob(canvas, mime, quality) { ... }
+                    const blob = await canvasToBlob(c, "image/png", 1.0);
+
+                    const url = URL.createObjectURL(blob);
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                        img.onload = () => resolve(true);
+                        img.onerror = (e) => reject(e);
+                        img.src = url;
+                    });
+                    URL.revokeObjectURL(url);
+
+                    console.log("[RGBYP] initBaseImageAndCanvas: cloned node.imgs[0] into new Image", { w, h });
+                    baseImg = img;
+                } catch (e) {
+                    console.warn("[RGBYP] initBaseImageAndCanvas: clone from node.imgs[0] failed, fallback to URL", e);
+                }
+            }
+        }
+        return baseImg;
+    }
+
+    // async function handleLoadMask(node) {
+    //     const nodeType = (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
+    //     const isBridgeNode = nodeType === "RGBYPMaskBridge";
+
+    //     const nodeId = String(node?.id ?? "");
+    //     if (!nodeId) return;
+
+    //     const data = getWidgetJSON(node, "rgbyp_json");
+    //     const jsonAvailable = !!(data && typeof data === "object" && typeof data.original === "string" && data.original);
+
+    //     let originalBlob = null;
+    //     let originalW = 0;
+    //     let originalH = 0;
+    //     let originalFileName = "";
+    //     let originalOutName = "";
+
+    //     if (jsonAvailable) {
+    //         originalOutName = String(data.original);
+    //         originalFileName = originalFileNameFromRgbypFilename(originalOutName);
+    //         originalBlob = await (await loadBaseImg(node)).blob();
+    //     } else {
+    //         originalFileName = `RGBYPBridge`;
+    //         // const imgPath = "";
+
+    //         if (!isBridgeNode) {
+    //             const wImg = getWidget(node, "image");
+    //             const imgPath = wImg?.value || "";
+    //             if (!imgPath) return;
+
+    //             const { filename } = splitPath(imgPath);
+    //             originalFileName = stemOfFilename(filename);
+
+    //             originalOutName = `${originalFileName}-rgbyp-original-${nodeId}.png`;
+    //             originalBlob = await (await loadBaseImg(node)).blob();
+    //             await uploadFile(originalBlob, originalOutName, "input", "clipspace");
+    //         } else {
+    //             originalOutName = `${originalFileName}-rgbyp-original-${nodeId}.png`;
+    //             originalBlob = await (await loadFile(originalOutName, "input", "clipspace")).blob();
+    //         }
+
+    //     }
+    //     console.log("handleLoadMask() originalOutName", originalOutName);
+
+    //     const imgOrig = await blobToImage(originalBlob);
+    //     originalW = imgOrig.naturalWidth || imgOrig.width;
+    //     originalH = imgOrig.naturalHeight || imgOrig.height;
+
+    //     const file = await pickMaskFile();
+    //     if (!file) { return; }
+
+    //     const maskResizedBlob = await resizeImageBlob(file, originalW, originalH);
+
+    //     const maskOutName = `${originalFileName}-rgbyp-mask-${nodeId}.png`;
+    //     await uploadFile(maskResizedBlob, maskOutName, "input", "clipspace");
+
+    //     const compositeOutName = `${originalFileName}-rgbyp-composite-${nodeId}.png`;
+    //     const compositeBlob = await bakeCompositePngBlob(originalBlob, maskResizedBlob, 0.7);
+    //     await uploadFile(compositeBlob, compositeOutName, "input", "clipspace");
+    //     const compositeOutPath = `clipspace\\${originalFileName}-rgbyp-composite-${nodeId}.png`;
+
+    //     const ts = Date.now();
+
+    //     const jsonObj = {
+    //         rgbyp_timestamp: ts,
+    //         original: originalOutName,
+    //         mask: maskOutName,
+    //         composite: compositeOutName,
+    //     };
+
+    //     node.__rgbyp_skip_clear_json_once = true;
+    //     updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
+
+
+    //     if (!isBridgeNode) {
+    //         updateWidgetValue(node, "image", compositeOutPath, true);
+    //     } else {
+    //         try {
+    //             const img = await loadImage(compositeOutName, "input", "clipspace");
+    //             node.img = img;
+    //             node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
+    //             // node.graph?.setDirtyCanvas(true, true);
+
+    //         } catch (e) {
+    //             console.warn("[RGBYPUtils] handleLoadMask: failed to update node preview", e);
+    //         }
+    //     }
+
+    // }
+
+    function canvasToBlob(canvas, mime = "image/png", quality = 1.0) {
+        return new Promise((resolve) => {
+            try {
+                if (!canvas || typeof canvas.toBlob !== "function") return resolve(null);
+                canvas.toBlob((b) => resolve(b), mime, quality);
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    }
 
     async function handleLoadMask(node) {
         const nodeType = (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
@@ -100,61 +237,122 @@ import {
         const nodeId = String(node?.id ?? "");
         if (!nodeId) return;
 
-        const data = getWidgetJSON(node, "rgbyp_json");
-        const jsonAvailable = !!(data && typeof data === "object" && typeof data.original === "string" && data.original);
+        // 1) base image from node
+        const baseImg = await loadBaseImg(node);
+        if (!baseImg) {
+            rgbypWarn("handleLoadMask: base image is missing (node has no preview/imgs[0])", { nodeId, nodeType });
+            return;
+        }
 
-        let originalBlob = null;
-        let originalW = 0;
-        let originalH = 0;
+        // 2) resolve filenames (mask/composite) from json or defaults
+        const data = getWidgetJSON(node, "rgbyp_json");
+        const jsonAvailable = !!(data && typeof data === "object");
+
+        let maskOutName = "";
+        let compositeOutName = "";
         let originalFileName = "";
         let originalOutName = "";
 
-        if (jsonAvailable) {
+        if (jsonAvailable && typeof data.original === "string" && data.original) {
             originalOutName = String(data.original);
-            originalFileName = originalFileNameFromRgbypFilename(originalOutName);
-            originalBlob = await (await loadFile(originalOutName, "input", "clipspace")).blob();
-        } else {
-            originalFileName = `RGBYPBridge`;
-            // const imgPath = "";
+        }
+        if (jsonAvailable && typeof data.mask === "string" && data.mask) {
+            maskOutName = String(data.mask);
+        }
+        if (jsonAvailable && typeof data.composite === "string" && data.composite) {
+            compositeOutName = String(data.composite);
+        }
 
-            if (!isBridgeNode) {
-                const wImg = getWidget(node, "image");
-                const imgPath = wImg?.value || "";
-                if (!imgPath) return;
-
+        if (!maskOutName || !compositeOutName) {
+            if (isBridgeNode) {
+                originalFileName = "RGBYPBridge";
+            } else {
+                const wImg = getWidget(node, "image") || getWidget(node, "loadImage");
+                const imgPath = String(wImg?.value || "");
+                if (!imgPath) {
+                    rgbypWarn("handleLoadMask: missing image widget value", { nodeId, nodeType });
+                    return;
+                }
                 const { filename } = splitPath(imgPath);
                 originalFileName = stemOfFilename(filename);
-
-                originalOutName = `${originalFileName}-rgbyp-original-${nodeId}.png`;
-                originalBlob = await (await loadFileFromPath(imgPath, "input")).blob();
-                await uploadFile(originalBlob, originalOutName, "input", "clipspace");
-            } else {
-                originalOutName = `${originalFileName}-rgbyp-original-${nodeId}.png`;
-                originalBlob = await (await loadFile(originalOutName, "input", "clipspace")).blob();
+                if (!originalFileName) originalFileName = "RGBYP";
             }
-
+            if (!originalOutName) originalOutName = `${originalFileName}-rgbyp-original-${nodeId}.png`;
+            if (!maskOutName) maskOutName = `${originalFileName}-rgbyp-mask-${nodeId}.png`;
+            if (!compositeOutName) compositeOutName = `${originalFileName}-rgbyp-composite-${nodeId}.png`;
+        } else {
+            originalFileName = originalFileNameFromRgbypFilename(originalOutName || maskOutName || compositeOutName);
         }
-        console.log("handleLoadMask() originalOutName", originalOutName);
 
-        const imgOrig = await blobToImage(originalBlob);
-        originalW = imgOrig.naturalWidth || imgOrig.width;
-        originalH = imgOrig.naturalHeight || imgOrig.height;
 
+        // 3) pick mask file
         const file = await pickMaskFile();
-        if (!file) { return; }
+        if (!file) return;
 
-        const maskResizedBlob = await resizeImageBlob(file, originalW, originalH);
+        // 4) read setting "Downscale to maximum side" => downscale_preview_to
+        let downscale_preview_to = 0;
+        try {
+            downscale_preview_to = Number(app.extensionManager.setting.get("AK.RGBYP.downscale_max_side")) || 0;
+        } catch (_) {
+            downscale_preview_to = 0;
+        }
 
-        const maskOutName = `${originalFileName}-rgbyp-mask-${nodeId}.png`;
+        // 5) compute target size for base image (optional downscale)
+        const baseW0 = baseImg.naturalWidth || baseImg.width || 0;
+        const baseH0 = baseImg.naturalHeight || baseImg.height || 0;
+        if (baseW0 <= 0 || baseH0 <= 0) {
+            rgbypWarn("handleLoadMask: invalid base image size", { baseW0, baseH0, nodeId });
+            return;
+        }
+
+        let targetW = baseW0;
+        let targetH = baseH0;
+
+        if (downscale_preview_to > 0) {
+            const maxSide = Math.max(baseW0, baseH0);
+            if (maxSide > downscale_preview_to) {
+                const s = downscale_preview_to / maxSide;
+                targetW = Math.max(1, Math.round(baseW0 * s));
+                targetH = Math.max(1, Math.round(baseH0 * s));
+            }
+        }
+
+        // 6) convert base image to blob, and downscale if needed
+        const baseCanvas = document.createElement("canvas");
+        baseCanvas.width = baseW0;
+        baseCanvas.height = baseH0;
+        const baseCtx = baseCanvas.getContext("2d");
+        baseCtx.drawImage(baseImg, 0, 0, baseW0, baseH0);
+
+        let baseBlob = await canvasToBlob(baseCanvas, "image/png", 1.0);
+        if (!baseBlob) {
+            rgbypWarn("handleLoadMask: failed to encode base image to blob", { nodeId });
+            return;
+        }
+
+        if (targetW !== baseW0 || targetH !== baseH0) {
+            baseBlob = await resizeImageBlob(baseBlob, targetW, targetH);
+        }
+        if (!jsonAvailable) {
+            try {
+                await uploadFile(baseBlob, originalOutName, "input", "clipspace");
+            } catch (e) {
+                rgbypWarn("handleLoadMask: failed to upload original", { originalOutName, nodeId }, e);
+                return;
+            }
+        }
+        // 7) resize chosen mask to base size (after downscale if used)
+        const maskResizedBlob = await resizeImageBlob(file, targetW, targetH);
+
+        // 8) save mask to input/clipspace with resolved name
         await uploadFile(maskResizedBlob, maskOutName, "input", "clipspace");
 
-        const compositeOutName = `${originalFileName}-rgbyp-composite-${nodeId}.png`;
-        const compositeBlob = await bakeCompositePngBlob(originalBlob, maskResizedBlob, 0.7);
+        // 9) bake composite (base + mask) and save composite
+        const compositeBlob = await bakeCompositePngBlob(baseBlob, maskResizedBlob, 0.7);
         await uploadFile(compositeBlob, compositeOutName, "input", "clipspace");
-        const compositeOutPath = `clipspace\\${originalFileName}-rgbyp-composite-${nodeId}.png`;
 
+        // 10) write json with new timestamp
         const ts = Date.now();
-
         const jsonObj = {
             rgbyp_timestamp: ts,
             original: originalOutName,
@@ -165,69 +363,138 @@ import {
         node.__rgbyp_skip_clear_json_once = true;
         updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
 
-
+        // 11) update preview (same as now)
         if (!isBridgeNode) {
+            const compositeOutPath = `clipspace\\${compositeOutName}`;
             updateWidgetValue(node, "image", compositeOutPath, true);
         } else {
             try {
                 const img = await loadImage(compositeOutName, "input", "clipspace");
                 node.img = img;
                 node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
-                // node.graph?.setDirtyCanvas(true, true);
-
             } catch (e) {
                 console.warn("[RGBYPUtils] handleLoadMask: failed to update node preview", e);
             }
         }
-
     }
 
-    async function handleResetMask(node) {
+    // async function handleResetMask(node) {
 
+    //     const nodeType = (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
+    //     const isBridgeNode = nodeType === "RGBYPMaskBridge";
+
+    //     const data = getWidgetJSON(node, "rgbyp_json");
+    //     const jsonAvailable = !!(data && typeof data === "object" && typeof data.original === "string" && data.original);
+    //     if (!jsonAvailable) return;
+
+    //     const nodeId = String(node?.id ?? "");
+    //     if (!nodeId) return;
+
+    //     const originalOutName = String(data.original);
+    //     const originalFileName = originalFileNameFromRgbypFilename(originalOutName);
+
+    //     const originalBlob = await (await loadFile(originalOutName, "input", "clipspace")).blob();
+
+    //     const compositeOutName = `${originalFileName}-rgbyp-composite-${nodeId}.png`;
+    //     await uploadFile(originalBlob, compositeOutName, "input", "clipspace");
+
+    //     const compositeOutPath = `clipspace\\${originalFileName}-rgbyp-composite-${nodeId}.png`;
+
+    //     const ts = Date.now();
+
+    //     const jsonObj = {
+    //         rgbyp_timestamp: ts,
+    //         original: originalOutName,
+    //         composite: compositeOutName,
+    //     };
+
+    //     node.__rgbyp_skip_clear_json_once = true;
+    //     updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
+
+    //     if (!isBridgeNode) {
+    //         updateWidgetValue(node, "image", compositeOutPath, true);
+    //     } else {
+    //         try {
+    //             const img = await loadImage(compositeOutName, "input", "clipspace");
+    //             node.img = img;
+    //             node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
+    //             // node.graph?.setDirtyCanvas(true, true);
+    //         } catch (e) {
+    //             console.warn("[RGBYPUtils] handleResetMask: failed to update node preview", e);
+    //         }
+    //     }
+
+    // }
+    function runPartialExecutionForNode(node) {
+        try {
+            // 1) select node in canvas
+            if (app?.canvas?.selectNode) app.canvas.selectNode(node);
+            if (app?.canvas) app.canvas.node_selected = node;
+
+            // 2) try to click the Partial Execution button in the selection toolbox
+            const btn =
+                document.querySelector('button[title*="Partial"]') ||
+                document.querySelector('button[aria-label*="Partial"]') ||
+                document.querySelector('button[title*="Run"]') ||
+                document.querySelector('button[aria-label*="Run"]');
+
+            if (btn) {
+                btn.click();
+                return true;
+            }
+
+            console.warn("[RGBYPUtils] Partial Execution button not found in DOM");
+        } catch (e) {
+            console.warn("[RGBYPUtils] runPartialExecutionForNode failed", e);
+        }
+        return false;
+    }
+
+
+    async function handleResetMask(node) {
         const nodeType = (node.type || node.comfyClass || (node.constructor && node.constructor.name) || "") + "";
         const isBridgeNode = nodeType === "RGBYPMaskBridge";
+        const isLoadImageNode = nodeType === "RGBYPLoadImage";
 
-        const data = getWidgetJSON(node, "rgbyp_json");
-        const jsonAvailable = !!(data && typeof data === "object" && typeof data.original === "string" && data.original);
-        if (!jsonAvailable) return;
-
-        const nodeId = String(node?.id ?? "");
-        if (!nodeId) return;
-
-        const originalOutName = String(data.original);
-        const originalFileName = originalFileNameFromRgbypFilename(originalOutName);
-
-        const originalBlob = await (await loadFile(originalOutName, "input", "clipspace")).blob();
-
-        const compositeOutName = `${originalFileName}-rgbyp-composite-${nodeId}.png`;
-        await uploadFile(originalBlob, compositeOutName, "input", "clipspace");
-
-        const compositeOutPath = `clipspace\\${originalFileName}-rgbyp-composite-${nodeId}.png`;
-
-        const ts = Date.now();
-
-        const jsonObj = {
-            rgbyp_timestamp: ts,
-            original: originalOutName,
-            composite: compositeOutName,
-        };
-
-        node.__rgbyp_skip_clear_json_once = true;
-        updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
-
-        if (!isBridgeNode) {
-            updateWidgetValue(node, "image", compositeOutPath, true);
-        } else {
-            try {
-                const img = await loadImage(compositeOutName, "input", "clipspace");
-                node.img = img;
-                node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
-                // node.graph?.setDirtyCanvas(true, true);
-            } catch (e) {
-                console.warn("[RGBYPUtils] handleResetMask: failed to update node preview", e);
-            }
+        if (isBridgeNode) {
+            updateWidgetValue(node, "rgbyp_json", "", true);
+            runPartialExecutionForNode(node);
+            return;
         }
 
+        if (isLoadImageNode) {
+            // read json (do NOT use getWidgetJSON(), it is strict)
+            const raw = getWidgetValue(node, "rgbyp_json");
+            if (!raw) return;
+
+            let obj = null;
+            try { obj = JSON.parse(raw); } catch (_) { obj = null; }
+            if (!obj || typeof obj !== "object") return;
+
+            const originalName = String(obj.original || "");
+            if (!originalName) return;
+
+            // set preview to original (clipspace\filename.png)
+            const originalPath = `clipspace\\${originalName}`;
+
+            // update widget (this is the main preview mechanism for RGBYPLoadImage)
+            updateWidgetValue(node, "image", originalPath, true);
+
+            // optional: also set node.img/imgs for immediate redraw (harmless if unused)
+            try {
+                const img = await loadImage(originalName, "input", "clipspace");
+                node.img = img;
+                node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
+            } catch (e) {
+                console.warn("[RGBYPUtils] handleResetMask: failed to preload original preview image", e);
+            }
+
+            // clear json at the end
+            updateWidgetValue(node, "rgbyp_json", "", true);
+
+            runPartialExecutionForNode(node);
+            return;
+        }
     }
 
     const BUTTON_H = 26;
@@ -253,9 +520,9 @@ import {
         const h = node.size?.[1] ?? 0;
 
         // const y = h - BUTTON_H - BUTTON_MARGIN;
-        const y = BUTTON_MARGIN;              
+        const y = BUTTON_MARGIN;
 
-        const bw = 34;                
+        const bw = 34;
         const total = bw * 2 + BUTTON_GAP;
 
         const x1 = Math.max(0, Math.floor((w - total) / 2));
@@ -487,11 +754,11 @@ import {
 
     function setDownscaleFactor(node) {
         try {
-            const wDownscale = getWidget(node, "downscale_preview_mask_to");
+            const wDownscale = getWidget(node, "downscale_preview_to");
             if (wDownscale) {
                 const enable = !!__rgbyp_ds_enable;
                 const maxSide = Number(__rgbyp_ds_maxSide) || 0;
-                updateWidgetValue(node, "downscale_preview_mask_to", enable ? maxSide : 0, true);
+                updateWidgetValue(node, "downscale_preview_to", enable ? maxSide : 0, true);
             }
 
             const wScaleMask = getWidget(node, "scale_mask_output");
