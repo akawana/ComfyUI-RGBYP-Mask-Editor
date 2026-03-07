@@ -31,7 +31,6 @@ class RGBYPMaskToList:
         return {
             "required": {
                 "rgbyp_mask": ("IMAGE",),
-                "fix_list_length_to_5": ("BOOLEAN", {"default": True}),
             },
             "optional": {
                 "strength_settings": ("STRING", {"forceInput": True}),
@@ -45,7 +44,7 @@ class RGBYPMaskToList:
     FUNCTION = "convert"
     OUTPUT_IS_LIST = (True,)
 
-    def convert(self, rgbyp_mask, fix_list_length_to_5=True, strength_settings=None):
+    def convert(self, rgbyp_mask, strength_settings=None):
         """
         rgbyp_mask: torch.Tensor, shape (B, H, W, C), values [0..1]
         """
@@ -123,28 +122,38 @@ class RGBYPMaskToList:
         pink_bool = (r > thr_hi) & (g < thr_lo) & (b > thr_hi)
 
         # Convert to float masks (B, H, W)
-        red_mask = red_bool.float() * red_strength
-        green_mask = green_bool.float() * green_strength
-        blue_mask = blue_bool.float() * blue_strength
-        yellow_mask = yellow_bool.float() * yellow_strength
-        pink_mask = pink_bool.float() * pink_strength
+        red_mask = red_bool.float()
+        green_mask = green_bool.float()
+        blue_mask = blue_bool.float()
+        yellow_mask = yellow_bool.float()
+        pink_mask = pink_bool.float()
 
-        all_masks = [red_mask, green_mask, blue_mask, yellow_mask, pink_mask]
+        # Apply strengths (same logic as RGBYPMaskToRegularMasks)
+        red_mask = red_mask * red_strength
+        green_mask = green_mask * green_strength
+        blue_mask = blue_mask * blue_strength
+        yellow_mask = yellow_mask * yellow_strength
+        pink_mask = pink_mask * pink_strength
 
-        if fix_list_length_to_5:
-            # Original behavior: always return 5 masks, replace empty with 64x64 black
-            def ensure_non_empty_or_64x64(mask):
-                if mask.sum() == 0:
-                    return torch.zeros((B, 64, 64), device=device, dtype=mask.dtype)
-                return mask
+        # If mask has no non-zero pixels, replace with (B, 64, 64) black mask
+        def ensure_non_empty_or_64x64(mask):
+            if mask.sum() == 0:
+                return torch.zeros((B, 64, 64), device=device, dtype=mask.dtype)
+            return mask
 
-            masks = [ensure_non_empty_or_64x64(m) for m in all_masks]
-        else:
-            # Only return masks for colors that are actually present in the image
-            masks = [m for m in all_masks if m.sum() > 0]
-            if len(masks) == 0:
-                # Nothing found at all — return single 64x64 black mask
-                masks = [torch.zeros((B, 64, 64), device=device, dtype=torch.float32)]
+        red_mask = ensure_non_empty_or_64x64(red_mask)
+        green_mask = ensure_non_empty_or_64x64(green_mask)
+        blue_mask = ensure_non_empty_or_64x64(blue_mask)
+        yellow_mask = ensure_non_empty_or_64x64(yellow_mask)
+        pink_mask = ensure_non_empty_or_64x64(pink_mask)
+
+        masks = [
+            red_mask,
+            green_mask,
+            blue_mask,
+            yellow_mask,
+            pink_mask,
+        ]
 
         return (masks,)
 

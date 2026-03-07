@@ -30,6 +30,10 @@ from .nodes.MaskGrowBlur import NODE_DISPLAY_NAME_MAPPINGS as MGB_DISPLAY
 from .nodes.RGBYPMaskToList import NODE_CLASS_MAPPINGS as MTL_MAPPINGS
 from .nodes.RGBYPMaskToList import NODE_DISPLAY_NAME_MAPPINGS as MTL_DISPLAY
 
+from .nodes.RGBYPColorToMask import NODE_CLASS_MAPPINGS as RGBYPColorToMask_MAPPINGS
+from .nodes.RGBYPColorToMask import NODE_DISPLAY_NAME_MAPPINGS as RGBYPColorToMask_DISPLAY
+
+
 NODE_CLASS_MAPPINGS = {
     **RGBYP_BR_MAPPINGS,
     **LI_MAPPINGS,
@@ -40,6 +44,7 @@ NODE_CLASS_MAPPINGS = {
     **SM_MAPPINGS,
     **MGB_MAPPINGS,
     **MTL_MAPPINGS,
+    **RGBYPColorToMask_MAPPINGS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -52,6 +57,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     **SM_DISPLAY,
     **MGB_DISPLAY,
     **MTL_DISPLAY,
+    **RGBYPColorToMask_DISPLAY,
 }
 
 __all__ = [
