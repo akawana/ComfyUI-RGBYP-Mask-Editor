@@ -13,14 +13,6 @@ class RGBYPSaveMask:
                 "rgbyp_mask": ("IMAGE",),
                 "file_path": ("STRING", {"multiline": False, "default": ""}),
                 "file_name": ("STRING", {"multiline": False, "default": ""}),
-                "add_postfix": (
-                    "BOOLEAN",
-                    {
-                        "default": True,
-                        "label_on": "Add _rgbyp_mask",
-                        "label_off": "Exact name",
-                    },
-                ),
                 "override": (
                     "BOOLEAN",
                     {
@@ -61,7 +53,7 @@ class RGBYPSaveMask:
         except Exception as e:
             print(f"[RGBYPSaveMask] ERROR saving PNG '{path}': {e}")
 
-    def save(self, rgbyp_mask, file_path, file_name, add_postfix=True, override=True, unique_id=None):
+    def save(self, rgbyp_mask, file_path, file_name, override=True, unique_id=None):
         if not isinstance(file_path, str) or not isinstance(file_name, str):
             return (rgbyp_mask,)
 
@@ -89,75 +81,45 @@ class RGBYPSaveMask:
 
         base_name = file_name
 
-        if add_postfix:
-            base_with_suffix = f"{base_name}_rgbyp_mask"
+        base_with_suffix = f"{base_name}_rgbyp_mask"
 
-            if override:
-                if unique_id is not None:
-                    final_name = f"{base_with_suffix}_{unique_id}"
-                else:
-                    final_name = base_with_suffix
+        if override:
+            if unique_id is not None:
+                final_name = f"{base_with_suffix}_{unique_id}"
             else:
-                if unique_id is not None:
-                    base_with_suffix_node = f"{base_with_suffix}_{unique_id}"
-                else:
-                    base_with_suffix_node = base_with_suffix
-
-                max_index = 0
-                try:
-                    for existing in os.listdir(folder):
-                        if not existing.lower().endswith(".png"):
-                            continue
-
-                        name_no_ext, _ = os.path.splitext(existing)
-                        prefix = base_with_suffix_node + "_"
-
-                        if not name_no_ext.startswith(prefix):
-                            continue
-
-                        tail = name_no_ext[len(prefix):]
-                        if len(tail) == 2 and tail.isdigit():
-                            idx = int(tail)
-                            if 1 <= idx <= 99 and idx > max_index:
-                                max_index = idx
-                except Exception as e:
-                    print(f"[RGBYPSaveMask] ERROR scanning folder '{folder}' for mask indexes: {e}")
-                    max_index = 0
-
-                next_index = max_index + 1
-                if next_index > 99:
-                    next_index = 99
-
-                final_name = f"{base_with_suffix_node}_{next_index:02d}"
+                final_name = base_with_suffix
         else:
-            if override:
-                final_name = base_name
+            if unique_id is not None:
+                base_with_suffix_node = f"{base_with_suffix}_{unique_id}"
             else:
+                base_with_suffix_node = base_with_suffix
+
+            max_index = 0
+            try:
+                for existing in os.listdir(folder):
+                    if not existing.lower().endswith(".png"):
+                        continue
+
+                    name_no_ext, _ = os.path.splitext(existing)
+                    prefix = base_with_suffix_node + "_"
+
+                    if not name_no_ext.startswith(prefix):
+                        continue
+
+                    tail = name_no_ext[len(prefix):]
+                    if len(tail) == 2 and tail.isdigit():
+                        idx = int(tail)
+                        if 1 <= idx <= 99 and idx > max_index:
+                            max_index = idx
+            except Exception as e:
+                print(f"[RGBYPSaveMask] ERROR scanning folder '{folder}' for mask indexes: {e}")
                 max_index = 0
-                try:
-                    for existing in os.listdir(folder):
-                        if not existing.lower().endswith(".png"):
-                            continue
 
-                        name_no_ext, _ = os.path.splitext(existing)
-                        prefix = base_name + "_"
-                        if not name_no_ext.startswith(prefix):
-                            continue
+            next_index = max_index + 1
+            if next_index > 99:
+                next_index = 99
 
-                        tail = name_no_ext[len(prefix):]
-                        if len(tail) == 2 and tail.isdigit():
-                            idx = int(tail)
-                            if 1 <= idx <= 99 and idx > max_index:
-                                max_index = idx
-                except Exception as e:
-                    print(f"[RGBYPSaveMask] ERROR scanning folder '{folder}' for mask indexes: {e}")
-                    max_index = 0
-
-                next_index = max_index + 1
-                if next_index > 99:
-                    next_index = 99
-
-                final_name = f"{base_name}_{next_index:02d}"
+            final_name = f"{base_with_suffix_node}_{next_index:02d}"
 
         full_path = os.path.join(folder, final_name + ".png")
 

@@ -243,6 +243,18 @@ import {
         const data = getWidgetJSON(node, "rgbyp_json");
         const jsonAvailable = !!(data && typeof data === "object");
 
+        // read dhash from raw json (getWidgetJSON rejects json without rgbyp_timestamp)
+        let existingDhash = undefined;
+        try {
+            const rawJson = getWidgetValue(node, "rgbyp_json");
+            if (rawJson) {
+                const rawParsed = JSON.parse(rawJson);
+                if (typeof rawParsed?.dhash !== "undefined") {
+                    existingDhash = rawParsed.dhash;
+                }
+            }
+        } catch (_) {}
+
         let maskOutName = "";
         let compositeOutName = "";
         let originalFileName = "";
@@ -385,6 +397,9 @@ import {
             mask: maskOutName,
             composite: compositeOutName,
         };
+        if (typeof existingDhash !== "undefined") {
+            jsonObj.dhash = existingDhash;
+        }
 
         node.__rgbyp_skip_clear_json_once = true;
         updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
