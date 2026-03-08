@@ -44,7 +44,8 @@ import {
         canvas.width = targetW;
         canvas.height = targetH;
         const ctx = canvas.getContext("2d");
-        // ctx.clearRect(0, 0, targetW, targetH);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, targetW, targetH);
 
         return await new Promise((resolve) => {
@@ -62,6 +63,7 @@ import {
         canvas.height = h;
         const ctx = canvas.getContext("2d");
 
+        ctx.imageSmoothingEnabled = false;
         ctx.globalAlpha = 1.0;
         ctx.drawImage(imgOrig, 0, 0, w, h);
 
@@ -237,14 +239,7 @@ import {
         const nodeId = String(node?.id ?? "");
         if (!nodeId) return;
 
-        // 1) base image from node
-        const baseImg = await loadBaseImg(node);
-        if (!baseImg) {
-            rgbypWarn("handleLoadMask: base image is missing (node has no preview/imgs[0])", { nodeId, nodeType });
-            return;
-        }
-
-        // 2) resolve filenames (mask/composite) from json or defaults
+        // 1) resolve filenames from json
         const data = getWidgetJSON(node, "rgbyp_json");
         const jsonAvailable = !!(data && typeof data === "object");
 
@@ -284,12 +279,56 @@ import {
             originalFileName = originalFileNameFromRgbypFilename(originalOutName || maskOutName || compositeOutName);
         }
 
+        // 2) load base image:
+        //    - if json.original exists → load that file from clipspace (clean original, not composite)
+        //    - otherwise → fall back to node.imgs[0] (first run, no json yet)
+        let baseBlob = null;
+        let baseW0 = 0;
+        let baseH0 = 0;
 
-        // 3) pick mask file
-        const file = await pickMaskFile();
-        if (!file) return;
+        const hasOriginalFile = !!(jsonAvailable && originalOutName);
 
-        // 4) read setting "Downscale to maximum side" => downscale_preview_to
+        if (hasOriginalFile) {
+            // Load the clean original from clipspace
+            try {
+                const origFile = await loadFile(originalOutName, "input", "clipspace");
+                baseBlob = origFile instanceof Blob ? origFile : await origFile.blob();
+                const imgCheck = await blobToImage(baseBlob);
+                baseW0 = imgCheck.naturalWidth || imgCheck.width;
+                baseH0 = imgCheck.naturalHeight || imgCheck.height;
+            } catch (e) {
+                rgbypWarn("handleLoadMask: failed to load original from clipspace, falling back to node preview", { originalOutName }, e);
+                baseBlob = null;
+            }
+        }
+
+        if (!baseBlob) {
+            // Fallback: use node.imgs[0]
+            const baseImg = await loadBaseImg(node);
+            if (!baseImg) {
+                rgbypWarn("handleLoadMask: base image is missing (node has no preview/imgs[0])", { nodeId, nodeType });
+                return;
+            }
+            baseW0 = baseImg.naturalWidth || baseImg.width || 0;
+            baseH0 = baseImg.naturalHeight || baseImg.height || 0;
+            if (baseW0 <= 0 || baseH0 <= 0) {
+                rgbypWarn("handleLoadMask: invalid base image size", { baseW0, baseH0, nodeId });
+                return;
+            }
+            const baseCanvas = document.createElement("canvas");
+            baseCanvas.width = baseW0;
+            baseCanvas.height = baseH0;
+            const baseCtx = baseCanvas.getContext("2d");
+            baseCtx.imageSmoothingEnabled = false;
+            baseCtx.drawImage(baseImg, 0, 0, baseW0, baseH0);
+            baseBlob = await canvasToBlob(baseCanvas, "image/png", 1.0);
+            if (!baseBlob) {
+                rgbypWarn("handleLoadMask: failed to encode base image to blob", { nodeId });
+                return;
+            }
+        }
+
+        // 3) read setting "Downscale to maximum side"
         let downscale_preview_to = 0;
         try {
             downscale_preview_to = Number(app.extensionManager.setting.get("AK.RGBYP.downscale_max_side")) || 0;
@@ -297,14 +336,7 @@ import {
             downscale_preview_to = 0;
         }
 
-        // 5) compute target size for base image (optional downscale)
-        const baseW0 = baseImg.naturalWidth || baseImg.width || 0;
-        const baseH0 = baseImg.naturalHeight || baseImg.height || 0;
-        if (baseW0 <= 0 || baseH0 <= 0) {
-            rgbypWarn("handleLoadMask: invalid base image size", { baseW0, baseH0, nodeId });
-            return;
-        }
-
+        // 4) downscale base if needed
         let targetW = baseW0;
         let targetH = baseH0;
 
@@ -317,23 +349,12 @@ import {
             }
         }
 
-        // 6) convert base image to blob, and downscale if needed
-        const baseCanvas = document.createElement("canvas");
-        baseCanvas.width = baseW0;
-        baseCanvas.height = baseH0;
-        const baseCtx = baseCanvas.getContext("2d");
-        baseCtx.drawImage(baseImg, 0, 0, baseW0, baseH0);
-
-        let baseBlob = await canvasToBlob(baseCanvas, "image/png", 1.0);
-        if (!baseBlob) {
-            rgbypWarn("handleLoadMask: failed to encode base image to blob", { nodeId });
-            return;
-        }
-
         if (targetW !== baseW0 || targetH !== baseH0) {
             baseBlob = await resizeImageBlob(baseBlob, targetW, targetH);
         }
-        if (!jsonAvailable) {
+
+        if (!hasOriginalFile) {
+            // First run — upload original so future runs can load it cleanly
             try {
                 await uploadFile(baseBlob, originalOutName, "input", "clipspace");
             } catch (e) {
@@ -341,17 +362,22 @@ import {
                 return;
             }
         }
-        // 7) resize chosen mask to base size (after downscale if used)
+
+        // 5) pick mask file
+        const file = await pickMaskFile();
+        if (!file) return;
+
+        // 6) resize mask to base size
         const maskResizedBlob = await resizeImageBlob(file, targetW, targetH);
 
-        // 8) save mask to input/clipspace with resolved name
+        // 7) save mask
         await uploadFile(maskResizedBlob, maskOutName, "input", "clipspace");
 
-        // 9) bake composite (base + mask) and save composite
+        // 8) bake composite from clean original + new mask
         const compositeBlob = await bakeCompositePngBlob(baseBlob, maskResizedBlob, 0.7);
         await uploadFile(compositeBlob, compositeOutName, "input", "clipspace");
 
-        // 10) write json with new timestamp
+        // 9) write json with new timestamp
         const ts = Date.now();
         const jsonObj = {
             rgbyp_timestamp: ts,
@@ -363,7 +389,7 @@ import {
         node.__rgbyp_skip_clear_json_once = true;
         updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
 
-        // 11) update preview (same as now)
+        // 10) update preview
         if (!isBridgeNode) {
             const compositeOutPath = `clipspace\\${compositeOutName}`;
             updateWidgetValue(node, "image", compositeOutPath, true);
@@ -737,18 +763,20 @@ import {
     let __rgbyp_ds_enable = null;   // boolean
     let __rgbyp_ds_maxSide = null;  // number
     let __rgbyp_scale_mask_output = null; // boolean
+    let __rgbyp_image_change_sensitivity = null; // number
 
     function initDownscaleCacheFromSettings() {
         try {
             __rgbyp_ds_enable = !!app.extensionManager.setting.get("AK.RGBYP.downscale_preview_bridge");
             __rgbyp_ds_maxSide = Number(app.extensionManager.setting.get("AK.RGBYP.downscale_max_side")) || 800;
             __rgbyp_scale_mask_output = !!app.extensionManager.setting.get("AK.RGBYP.scale_mask_output");
+            __rgbyp_image_change_sensitivity = Number(app.extensionManager.setting.get("AK.RGBYP.image_change_sensitivity")) || 20;
         } catch (_) {
             // fallback дефолты
             __rgbyp_ds_enable = false;
             __rgbyp_ds_maxSide = 800;
             __rgbyp_scale_mask_output = false;
-
+            __rgbyp_image_change_sensitivity = 20;
         }
     }
 
@@ -764,6 +792,11 @@ import {
             const wScaleMask = getWidget(node, "scale_mask_output");
             if (wScaleMask) {
                 updateWidgetValue(node, "scale_mask_output", !!__rgbyp_scale_mask_output, true);
+            }
+
+            const wSensitivity = getWidget(node, "image_change_sensitivity");
+            if (wSensitivity) {
+                updateWidgetValue(node, "image_change_sensitivity", Number(__rgbyp_image_change_sensitivity) || 20, true);
             }
 
             // node.graph?.setDirtyCanvas(true, true);
@@ -820,6 +853,22 @@ import {
                 applyDownscaleToAllBridgeNodes();
             },
         });
+        S.addSetting({
+            id: "AK.RGBYP.image_change_sensitivity",
+            name: "Mask Bridge image change sensitivity (1 to 63):",
+            type: "number",
+            defaultValue: 20,
+            attrs: {
+                min: 1,
+                max: 63,
+                step: 1,
+            },
+            category: ["AK", "RGBYP", "Mask Bridge image change sensitivity (1 to 63)"],
+            onChange: (newVal, oldVal) => {
+                __rgbyp_image_change_sensitivity = Number(newVal) || 20;
+                applyDownscaleToAllBridgeNodes();
+            },
+        });
 
 
     }
@@ -868,14 +917,23 @@ import {
 
                 if ((this.type || this.comfyClass) !== "RGBYPMaskBridge") return;
 
-                const v = message?.rgbyp_json;
+                // Guard: rgbyp_json from server is always an array-wrapped value; extract the string safely
+                let v = message?.rgbyp_json;
+                if (Array.isArray(v)) {
+                    // Only use it if it's a single-element array containing a string — otherwise leave json untouched
+                    if (v.length === 1 && (typeof v[0] === "string" || v[0] === null)) {
+                        v = v[0] ?? "";
+                    } else {
+                        // Multiple elements = batch output slipped through; do NOT corrupt the widget
+                        console.warn("[RGBYP] onExecuted: unexpected multi-element rgbyp_json array, skipping update", v);
+                        return;
+                    }
+                }
 
-                // if (typeof v === "string") {
                 this.__rgbyp_skip_clear_json_once = true;
                 console.log("[RGBYP] RGBYPMaskBridge onExecuted", v);
                 updateWidgetValue(this, "rgbyp_json", v, true);
                 // node.graph?.setDirtyCanvas(true, true);
-                // }
             };
         },
     });

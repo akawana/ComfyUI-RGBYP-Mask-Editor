@@ -108,13 +108,9 @@ class RGBYPLoadImage:
             file_name = os.path.splitext(os.path.basename(original_fn.replace("\\", "/")))[0]
             return (out_image, rgbyp_mask, mask_tensor, file_path, file_name)
 
-        out_image, mask_tensor = base_loader.load_image(image)
+        out_image, _ = base_loader.load_image(image)
         rgbyp_mask = _make_black_64(out_image.device, out_image.dtype)
-
-        # mask_tensor from base loader already contains the ComfyUI built-in mask editor result.
-        # Only fall back to black 64x64 if it's missing or empty.
-        if mask_tensor is None:
-            mask_tensor = _make_black_mask_64(out_image.device)
+        mask_tensor = _make_black_mask_64(out_image.device)
 
         abs_path = folder_paths.get_annotated_filepath(image)
         file_path = os.path.dirname(abs_path) + "\\"

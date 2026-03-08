@@ -7,8 +7,6 @@ import numpy as np
 
 from .RGBYPUtils import (
     _make_black_64,
-    _make_black_mask_64,
-    _rgbyp_mask_to_regular_mask,
     _load_image_from_path,
     save_image_tensor_to_clipspace,
     bake_composite_with_mask,
@@ -155,11 +153,11 @@ class RGBYPMaskBridge:
 
     DESCRIPTION = "Pass-through image + cached RGBYP mask; updates preview on input changes."
     CATEGORY = "AK/RGBYP"
-    RETURN_TYPES = ("IMAGE", "MASK", "IMAGE")
-    RETURN_NAMES = ("image", "mask", "rgbyp_mask")
+    RETURN_TYPES = ("IMAGE", "IMAGE")
+    RETURN_NAMES = ("image", "rgbyp_mask")
     OUTPUT_NODE = True
     INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (True, False, False)
+    OUTPUT_IS_LIST = (True, False)
     FUNCTION = "execute"
 
     _state: Dict[str, Dict[str, Any]] = {}
@@ -234,7 +232,7 @@ class RGBYPMaskBridge:
                 ],
                 "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
             }
-            return {"result": (image, _make_black_mask_64(device=str(first.device)), black), "ui": ui}
+            return {"result": (image, black), "ui": ui}
 
         # Single image — unwrap the list
         image = image[0]
@@ -353,12 +351,6 @@ class RGBYPMaskBridge:
         except Exception:
             pass
 
-        # Convert rgbyp_mask (IMAGE-like RGBA tensor) to regular MASK (1,H,W float)
-        # Priority: rgbyp mask from editor → black 64px fallback
-        regular_mask = _rgbyp_mask_to_regular_mask(st["mask_cache"], device=str(image.device))
-        if regular_mask is None:
-            regular_mask = _make_black_mask_64(device=str(image.device))
-
         ui = {
             "images": [
                 {
@@ -370,7 +362,7 @@ class RGBYPMaskBridge:
             "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
         }
 
-        return {"result": ([output_image], regular_mask, st["mask_cache"]), "ui": ui}
+        return {"result": ([output_image], st["mask_cache"]), "ui": ui}
 
 
 NODE_CLASS_MAPPINGS = {"RGBYPMaskBridge": RGBYPMaskBridge}

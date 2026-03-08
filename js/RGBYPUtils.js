@@ -888,6 +888,26 @@ import {
             const nm = nodeData?.name;
             if (nm !== "RGBYPMaskBridge" && nm !== "RGBYPLoadImage") return;
 
+            if (nm === "RGBYPMaskBridge" || nm === "RGBYPLoadImage") {
+                const oldGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+                nodeType.prototype.getExtraMenuOptions = function (canvas, options) {
+                    const result = oldGetExtraMenuOptions
+                        ? oldGetExtraMenuOptions.apply(this, arguments)
+                        : options;
+                    // Filter out ComfyUI built-in "Open in MaskEditor | Image Canvas" item
+                    if (Array.isArray(options)) {
+                        for (let i = options.length - 1; i >= 0; i--) {
+                            const item = options[i];
+                            if (item && typeof item.content === "string" &&
+                                item.content.includes("MaskEditor")) {
+                                options.splice(i, 1);
+                            }
+                        }
+                    }
+                    return result;
+                };
+            }
+
             const oldOnNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 if (oldOnNodeCreated) oldOnNodeCreated.apply(this, arguments);
