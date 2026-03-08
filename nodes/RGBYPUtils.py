@@ -273,6 +273,75 @@ def _rgbyp_mask_to_regular_mask(rgbyp_mask, device=None):
     return None
 
 
+def get_dhash(image: torch.Tensor, hash_size: int = 8) -> int:
+    """
+    Compute dHash (difference hash) for an IMAGE tensor (1,H,W,C).
+
+    Algorithm:
+      1. Convert to grayscale
+      2. Resize to (hash_size+1) x hash_size
+      3. Compare each pixel to its right neighbour in each row
+      4. Pack 64 bits into a single int
+
+    Returns: int (64-bit hash), or 0 on failure.
+
+    Hamming distance interpretation:
+      < 10  — visually similar (re-render, minor change)
+      > 20  — different image
+    """
+    if image is None or not isinstance(image, torch.Tensor):
+        return 0
+    if image.dim() != 4 or image.shape[0] != 1:
+        return 0
+
+    try:
+        t = image.detach()
+        if t.device.type != "cpu":
+            t = t.to("cpu")
+        t = t.float().clamp(0.0, 1.0)[0]  # (H, W, C)
+
+        c = int(t.shape[2])
+        if c >= 3:
+            # Luminance weights: 0.299 R + 0.587 G + 0.114 B
+            gray = t[:, :, 0] * 0.299 + t[:, :, 1] * 0.587 + t[:, :, 2] * 0.114
+        else:
+            gray = t[:, :, 0]  # single channel
+
+        # (H,W) → PIL → resize to (hash_size+1, hash_size)
+        arr = (gray.numpy() * 255.0).round().astype(np.uint8)
+        img = Image.fromarray(arr, mode="L")
+        try:
+            resample = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample = Image.LANCZOS
+        img = img.resize((hash_size + 1, hash_size), resample=resample)
+
+        pixels = np.array(img)  # (hash_size, hash_size+1)
+
+        # Compare each pixel to the one to its right
+        diff = pixels[:, :-1] > pixels[:, 1:]  # (hash_size, hash_size) bool
+
+        # Pack into integer
+        flat = diff.flatten()  # 64 bits
+        result = 0
+        for bit in flat:
+            result = (result << 1) | (1 if bit else 0)
+
+        return int(result)
+    except Exception:
+        return 0
+
+
+def dhash_distance(a: int, b: int) -> int:
+    """Hamming distance between two dHash values."""
+    x = a ^ b
+    dist = 0
+    while x:
+        dist += x & 1
+        x >>= 1
+    return dist
+
+
 def is_image_changed(prev_sig, image: torch.Tensor, grid: int = 12):
     """
     Cheap content-aware change detector for IMAGE tensor (1,H,W,C).

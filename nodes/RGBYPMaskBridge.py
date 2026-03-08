@@ -12,6 +12,8 @@ from .RGBYPUtils import (
     bake_composite_with_mask,
     clipspace_path,
     is_image_changed,
+    get_dhash,
+    dhash_distance,
 )
 
 
@@ -63,6 +65,55 @@ def _is_mask_64x64(mask: Any) -> bool:
         return False
 
 
+def _save_batch_error_image(unique_id) -> str:
+    """Generate a 512x128 PNG with an error message and save it to clipspace. Returns filename or ''."""
+    try:
+        from PIL import ImageDraw, ImageFont
+
+        W, H = 512, 128
+        img = Image.new("RGB", (W, H), color=(30, 30, 30))
+        draw = ImageDraw.Draw(img)
+
+        lines = ["Image batches or lists", "are not supported."]
+        font = None
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 22)
+        except Exception:
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            except Exception:
+                font = ImageFont.load_default()
+
+        fill = (220, 80, 80)
+        line_h = 30
+        total_h = line_h * len(lines)
+        y0 = (H - total_h) // 2
+
+        for i, line in enumerate(lines):
+            try:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                tw = bbox[2] - bbox[0]
+            except Exception:
+                tw = len(line) * 12
+            x = (W - tw) // 2
+            draw.text((x, y0 + i * line_h), line, font=font, fill=fill)
+
+        filename = f"RGBYPBridge-batch-error-{unique_id}.png"
+        try:
+            save_path = clipspace_path(filename)
+        except Exception:
+            import folder_paths
+            import os
+            save_path = os.path.join(folder_paths.get_input_directory(), "clipspace", filename)
+
+        import os
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        img.save(save_path, "PNG")
+        return filename
+    except Exception:
+        return ""
+
+
 class RGBYPMaskBridge:
     @classmethod
     def INPUT_TYPES(cls):
@@ -75,6 +126,15 @@ class RGBYPMaskBridge:
                         "default": 512,
                         "min": 0,
                         "max": 3200,
+                        "step": 1,
+                    },
+                ),
+                "image_change_sensitivity": (
+                    "INT",
+                    {
+                        "default": 20,
+                        "min": 1,
+                        "max": 63,
                         "step": 1,
                     },
                 ),
@@ -96,6 +156,8 @@ class RGBYPMaskBridge:
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image", "rgbyp_mask")
     OUTPUT_NODE = True
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True, False)
     FUNCTION = "execute"
 
     _state: Dict[str, Dict[str, Any]] = {}
@@ -123,9 +185,58 @@ class RGBYPMaskBridge:
         self,
         image,
         downscale_preview_to=512,
+        image_change_sensitivity=20,
         rgbyp_json="",
         unique_id=None,
     ):
+        # With INPUT_IS_LIST=True all inputs arrive as lists.
+        # Unwrap scalars first.
+        if isinstance(downscale_preview_to, list):
+            downscale_preview_to = downscale_preview_to[0] if downscale_preview_to else 512
+        if isinstance(image_change_sensitivity, list):
+            image_change_sensitivity = image_change_sensitivity[0] if image_change_sensitivity else 20
+        if isinstance(rgbyp_json, list):
+            rgbyp_json = rgbyp_json[0] if rgbyp_json else ""
+        if isinstance(unique_id, list):
+            unique_id = unique_id[0] if unique_id else None
+
+        # image is a list of tensors — each tensor is [N, H, W, C]
+        # Two batch cases:
+        #   1. List with multiple elements (multiple upstream nodes connected via list)
+        #   2. Single tensor with batch dim > 1 (e.g. upstream batch of 8)
+        if not isinstance(image, list):
+            image = [image]
+
+        is_batch = False
+        if len(image) != 1:
+            is_batch = True
+        elif isinstance(image[0], torch.Tensor) and image[0].dim() == 4 and image[0].shape[0] != 1:
+            is_batch = True
+
+        if is_batch:
+            # Show error image, pass through all images as list, don't touch rgbyp_json.
+            # Reset prev_input_sig so the next single-image run always refreshes the preview.
+            first = image[0]
+            uid = str(unique_id) if unique_id is not None else "none"
+            if uid in self._state:
+                self._state[uid]["prev_input_sig"] = None
+            black = _make_black_64(device=str(first.device), dtype=first.dtype)
+            error_filename = _save_batch_error_image(unique_id)
+            ui = {
+                "images": [
+                    {
+                        "filename": error_filename if error_filename else "",
+                        "subfolder": "clipspace",
+                        "type": "input",
+                    }
+                ],
+                "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
+            }
+            return {"result": (image, black), "ui": ui}
+
+        # Single image — unwrap the list
+        image = image[0]
+
         output_image = image
 
         st = self._get_state(unique_id, image)
@@ -143,6 +254,32 @@ class RGBYPMaskBridge:
                 parsed = json.loads(rgbyp_json)
             except Exception:
                 parsed = None
+
+        # --- dHash: detect if input image changed significantly ---
+        # Store as string to avoid JavaScript Number precision loss (> 2^53)
+        current_dhash = get_dhash(image)
+        current_dhash_str = str(current_dhash)
+
+        sensitivity = int(image_change_sensitivity) if isinstance(image_change_sensitivity, int) else 20
+        sensitivity = max(1, min(63, sensitivity))
+
+        if rgbyp_json_available and isinstance(parsed, dict):
+            stored_dhash = parsed.get("dhash", None)
+            if stored_dhash is not None:
+                try:
+                    stored_dhash_int = int(stored_dhash)
+                except Exception:
+                    stored_dhash_int = None
+
+                if stored_dhash_int is not None:
+                    dist = dhash_distance(current_dhash, stored_dhash_int)
+                    if dist > sensitivity:
+                        # Image changed significantly — reset mask and clear json
+                        st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
+                        st["previousTimestamp"] = 0
+                        rgbyp_json = ""
+                        rgbyp_json_available = False
+                        parsed = None
 
         mask_temp = None
         if rgbyp_json_available and isinstance(parsed, dict):
@@ -167,6 +304,10 @@ class RGBYPMaskBridge:
                 st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
             st["previousTimestamp"] = 0
 
+        prev_downscale = st.get("prev_downscale_preview_to", None)
+        downscale_changed = (prev_downscale != downscale_preview_to)
+        st["prev_downscale_preview_to"] = downscale_preview_to
+
         preview_image = image
         if isinstance(downscale_preview_to, int) and downscale_preview_to > 0:
             preview_image = _downscale_tensor_max_side(image, int(downscale_preview_to))
@@ -176,7 +317,7 @@ class RGBYPMaskBridge:
         original_filename = saved_original or ""
 
         preview_filename = ""
-        if input_changed and rgbyp_json_available and isinstance(parsed, dict):
+        if (input_changed or downscale_changed) and rgbyp_json_available and isinstance(parsed, dict):
             mask_name = parsed.get("mask", "")
             mask_tensor = None
             if isinstance(mask_name, str) and mask_name.strip():
@@ -194,11 +335,21 @@ class RGBYPMaskBridge:
             if not preview_filename:
                 preview_filename = original_filename
 
-        elif input_changed and (not rgbyp_json_available):
+        elif (input_changed or downscale_changed) and (not rgbyp_json_available):
             preview_filename = original_filename
 
         preview_image = None
         mask_temp = None
+
+        # Inject dhash as string — preserves all existing fields, avoids JS precision loss
+        try:
+            if isinstance(parsed, dict):
+                parsed["dhash"] = current_dhash_str
+                rgbyp_json = json.dumps(parsed)
+            else:
+                rgbyp_json = json.dumps({"dhash": current_dhash_str})
+        except Exception:
+            pass
 
         ui = {
             "images": [
@@ -211,7 +362,7 @@ class RGBYPMaskBridge:
             "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
         }
 
-        return {"result": (output_image, st["mask_cache"]), "ui": ui}
+        return {"result": ([output_image], st["mask_cache"]), "ui": ui}
 
 
 NODE_CLASS_MAPPINGS = {"RGBYPMaskBridge": RGBYPMaskBridge}

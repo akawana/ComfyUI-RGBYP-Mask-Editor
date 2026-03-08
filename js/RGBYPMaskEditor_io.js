@@ -148,6 +148,17 @@ export function initBaseImageAndCanvas() {
     (async () => {
         const rgbypJson = getWidgetJSON(node, "rgbyp_json");
 
+        // Read dhash separately — getWidgetJSON may return null when json has only {dhash}
+        try {
+            const raw = getWidgetValue(node, "rgbyp_json");
+            if (raw) {
+                const rawParsed = JSON.parse(raw);
+                if (typeof rawParsed?.dhash !== "undefined") {
+                    state.rgbypDhash = rawParsed.dhash;
+                }
+            }
+        } catch (_) {}
+
         let baseImg = null;
         let maskImg = null;
 
@@ -175,17 +186,13 @@ export function initBaseImageAndCanvas() {
             state.rgbypHadJsonOnOpen = false;
         }
 
-        // if (!baseImg) {
-        //     try {
-        //         baseImg = await loadImageFromUrl(withCacheBust(fallbackSrc));
-        //     } catch (e) {
-        //         console.error("[RGBYP] Failed to load image from node src", fallbackSrc, e);
-        //         return;
-        //     }
-        // }
-
-        if (!baseImg) 
+        if (!baseImg)
             baseImg = await loadBaseImg(node);
+
+        if (!baseImg) {
+            console.error("[RGBYP] initBaseImageAndCanvas: could not load base image, aborting");
+            return;
+        }
 
         state.baseImg = baseImg;
         state.maskImg = maskImg || null;
@@ -366,6 +373,11 @@ export async function saveMask() {
         mask: maskName,
         composite: compositeName,
     };
+
+    // Write dhash back exactly as it was — never compute or change it
+    if (typeof state.rgbypDhash !== "undefined") {
+        jsonObj.dhash = state.rgbypDhash;
+    }
 
     node.__rgbyp_skip_clear_json_once = true;
     updateWidgetValue(node, "rgbyp_json", JSON.stringify(jsonObj), true);
