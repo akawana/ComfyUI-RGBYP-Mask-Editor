@@ -215,9 +215,10 @@ export function initBaseImageAndCanvas() {
 
         const mctx = state.maskCanvas.getContext("2d");
         mctx.clearRect(0, 0, imgW, imgH);
+        // if (maskImg) {
+        // mctx.drawImage(maskImg, 0, 0);
+        // }
         if (maskImg) {
-            mctx.imageSmoothingEnabled = true;
-            mctx.imageSmoothingQuality = "high";
             mctx.drawImage(maskImg, 0, 0, imgW, imgH);
         }
 
@@ -343,7 +344,6 @@ export async function saveMask() {
         const cctx = compCanvas.getContext("2d");
         cctx.clearRect(0, 0, w, h);
 
-        cctx.imageSmoothingEnabled = false;
         cctx.drawImage(baseImg, 0, 0, w, h);
 
         const alpha = typeof state.maskOpacity === "number"

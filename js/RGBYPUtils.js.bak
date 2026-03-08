@@ -44,8 +44,7 @@ import {
         canvas.width = targetW;
         canvas.height = targetH;
         const ctx = canvas.getContext("2d");
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
+        // ctx.clearRect(0, 0, targetW, targetH);
         ctx.drawImage(img, 0, 0, targetW, targetH);
 
         return await new Promise((resolve) => {
@@ -63,7 +62,6 @@ import {
         canvas.height = h;
         const ctx = canvas.getContext("2d");
 
-        ctx.imageSmoothingEnabled = false;
         ctx.globalAlpha = 1.0;
         ctx.drawImage(imgOrig, 0, 0, w, h);
 
@@ -324,7 +322,6 @@ import {
         baseCanvas.width = baseW0;
         baseCanvas.height = baseH0;
         const baseCtx = baseCanvas.getContext("2d");
-        baseCtx.imageSmoothingEnabled = false;
         baseCtx.drawImage(baseImg, 0, 0, baseW0, baseH0);
 
         let baseBlob = await canvasToBlob(baseCanvas, "image/png", 1.0);

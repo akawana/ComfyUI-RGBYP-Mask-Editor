@@ -15,7 +15,7 @@ def _load_image_from_path(path, ref_tensor=None):
             try:
                 _, h, w, _ = ref_tensor.shape
                 if img.size != (w, h):
-                    img = img.resize((w, h), resample=Image.LANCZOS)
+                    img = img.resize((w, h), resample=Image.BILINEAR)
             except Exception:
                 pass
 
@@ -203,7 +203,7 @@ def bake_composite_with_mask(image, mask_rgba, opacity=0.7):
                 (arr * 255.0).astype(np.uint8),
                 mode="RGBA" if arr.shape[2] == 4 else "RGB",
             )
-            img = img.resize((int(w), int(h)), resample=Image.LANCZOS)
+            img = img.resize((int(w), int(h)), resample=Image.BILINEAR)
             arr2 = np.array(img).astype(np.float32) / 255.0
             m = torch.from_numpy(arr2)[None, ...].to(
                 device=base.device, dtype=base.dtype
