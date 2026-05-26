@@ -165,7 +165,6 @@ class RGBYPMaskBridge:
     _state: Dict[str, Dict[str, Any]] = {}
 
     def _get_state(self, unique_id: Optional[str], image: torch.Tensor) -> Dict[str, Any]:
-        import time
         uid = str(unique_id) if unique_id is not None else "none"
         st = self._state.get(uid)
         if st is None:
@@ -173,7 +172,6 @@ class RGBYPMaskBridge:
                 "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
                 "previousTimestamp": 0,
                 "prev_input_sig": None,
-                "fixed_timestamp": str(int(time.time() * 1000)),
             }
             self._state[uid] = st
         else:
@@ -183,9 +181,6 @@ class RGBYPMaskBridge:
                     st["mask_cache"] = m.to(device=image.device, dtype=image.dtype)
                 except Exception:
                     pass
-            # ensure fixed_timestamp exists for states created before this change
-            if "fixed_timestamp" not in st:
-                st["fixed_timestamp"] = str(int(time.time() * 1000))
         return st
 
     def execute(
@@ -247,20 +242,6 @@ class RGBYPMaskBridge:
         output_image = image
 
         st = self._get_state(unique_id, image)
-
-        # If no active mask (no rgbyp_timestamp in json) — always force input_changed=True
-        # to prevent stale prev_input_sig from blocking preview updates
-        _pre_parsed = None
-        try:
-            _raw = rgbyp_json if rgbyp_json else ""
-            if _raw.strip():
-                _pre_parsed = json.loads(_raw)
-        except Exception:
-            pass
-        if not (isinstance(_pre_parsed, dict) and "rgbyp_timestamp" in _pre_parsed):
-            st["prev_input_sig"] = None        
-
-        node_suffix = f"{unique_id}-{st['fixed_timestamp']}"
 
         input_changed, new_sig = is_image_changed(st.get("prev_input_sig"), image)
         st["prev_input_sig"] = new_sig
@@ -333,7 +314,7 @@ class RGBYPMaskBridge:
         if isinstance(downscale_preview_to, int) and downscale_preview_to > 0:
             preview_image = _downscale_tensor_max_side(image, int(downscale_preview_to))
 
-        original_filename = f"RGBYPBridge-rgbyp-original-{node_suffix}.png"
+        original_filename = f"RGBYPBridge-rgbyp-original-{unique_id}.png"
         saved_original = save_image_tensor_to_clipspace(preview_image, original_filename, max_side=0)
         original_filename = saved_original or ""
 
@@ -350,7 +331,7 @@ class RGBYPMaskBridge:
 
             comp = bake_composite_with_mask(preview_image, st["mask_cache"])
             if isinstance(comp, torch.Tensor):
-                composite_filename = f"RGBYPBridge-rgbyp-composite-{node_suffix}.png"
+                composite_filename = f"RGBYPBridge-rgbyp-composite-{unique_id}.png"
                 saved_comp = save_image_tensor_to_clipspace(comp, composite_filename, max_side=0)
                 preview_filename = saved_comp or ""
             if not preview_filename:
@@ -362,14 +343,13 @@ class RGBYPMaskBridge:
         preview_image = None
         mask_temp = None
 
-        # Inject dhash and fixed_timestamp — preserves all existing fields
+        # Inject dhash as string — preserves all existing fields, avoids JS precision loss
         try:
             if isinstance(parsed, dict):
                 parsed["dhash"] = current_dhash_str
-                parsed["fixed_timestamp"] = st["fixed_timestamp"]
                 rgbyp_json = json.dumps(parsed)
             else:
-                rgbyp_json = json.dumps({"dhash": current_dhash_str, "fixed_timestamp": st["fixed_timestamp"]})
+                rgbyp_json = json.dumps({"dhash": current_dhash_str})
         except Exception:
             pass
 
