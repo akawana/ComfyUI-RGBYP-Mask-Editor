@@ -166,16 +166,55 @@ class RGBYPMaskBridge:
 
     _state: Dict[str, Dict[str, Any]] = {}
 
-    def _get_state(self, unique_id: Optional[str], image: torch.Tensor) -> Dict[str, Any]:
+    # def _get_state(self, unique_id: Optional[str], image: torch.Tensor) -> Dict[str, Any]:
+    #     import time
+    #     uid = str(unique_id) if unique_id is not None else "none"
+    #     st = self._state.get(uid)
+    #     if st is None:
+    #         new_ts = str(int(time.time() * 1000))
+    #         print(f"[BRIDGE DEBUG] NEW STATE CREATED for uid={uid} fixed_timestamp={new_ts} _state_id={id(self._state)} existing_keys={list(self._state.keys())}")
+    #         st = {
+    #             "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
+    #             "previousTimestamp": 0,
+    #             "prev_input_sig": None,
+    #             "fixed_timestamp": str(int(time.time() * 1000)),
+    #         }
+    #         self._state[uid] = st
+    #     else:
+    #         m = st.get("mask_cache")
+    #         if isinstance(m, torch.Tensor):
+    #             try:
+    #                 st["mask_cache"] = m.to(device=image.device, dtype=image.dtype)
+    #             except Exception:
+    #                 pass
+    #         # ensure fixed_timestamp exists for states created before this change
+    #         if "fixed_timestamp" not in st:
+    #             st["fixed_timestamp"] = str(int(time.time() * 1000))
+    #     return st
+
+
+    def _get_state(self, unique_id: Optional[str], image: torch.Tensor, incoming_rgbyp_json: str = "") -> Dict[str, Any]:
         import time
         uid = str(unique_id) if unique_id is not None else "none"
         st = self._state.get(uid)
         if st is None:
+            # Recover fixed_timestamp from the widget's own JSON if it's already there —
+            # this happens after a server restart/reimport, when self._state is empty
+            # but the workflow's rgbyp_json widget still holds the real timestamp.
+            recovered_ts = None
+            try:
+                if incoming_rgbyp_json and str(incoming_rgbyp_json).strip():
+                    incoming_parsed = json.loads(incoming_rgbyp_json)
+                    if isinstance(incoming_parsed, dict) and incoming_parsed.get("fixed_timestamp"):
+                        recovered_ts = str(incoming_parsed["fixed_timestamp"])
+            except Exception:
+                recovered_ts = None
+
             st = {
                 "mask_cache": _make_black_64(device=str(image.device), dtype=image.dtype),
                 "previousTimestamp": 0,
                 "prev_input_sig": None,
-                "fixed_timestamp": str(int(time.time() * 1000)),
+                "fixed_timestamp": recovered_ts if recovered_ts else str(int(time.time() * 1000)),
             }
             self._state[uid] = st
         else:
@@ -260,7 +299,8 @@ class RGBYPMaskBridge:
 
         output_image = image
 
-        st = self._get_state(unique_id, image)
+        # st = self._get_state(unique_id, image)
+        st = self._get_state(unique_id, image, incoming_rgbyp_json=rgbyp_json)
 
         # If no active mask (no rgbyp_timestamp in json) — always force input_changed=True
         # to prevent stale prev_input_sig from blocking preview updates
@@ -336,7 +376,8 @@ class RGBYPMaskBridge:
 
             st["previousTimestamp"] = ts_int
 
-        if not rgbyp_json_available:
+        has_mask_ref = rgbyp_json_available and isinstance(parsed, dict) and bool(str(parsed.get("mask", "")).strip())
+        if not has_mask_ref:
             if not _is_mask_64x64(st.get("mask_cache")):
                 st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
             st["previousTimestamp"] = 0
@@ -354,7 +395,7 @@ class RGBYPMaskBridge:
         original_filename = saved_original or ""
 
         preview_filename = ""
-        if (input_changed or downscale_changed) and rgbyp_json_available and isinstance(parsed, dict):
+        if (input_changed or downscale_changed) and has_mask_ref:
             mask_name = parsed.get("mask", "")
             mask_tensor = None
             if isinstance(mask_name, str) and mask_name.strip():
@@ -372,8 +413,30 @@ class RGBYPMaskBridge:
             if not preview_filename:
                 preview_filename = original_filename
 
-        elif (input_changed or downscale_changed) and (not rgbyp_json_available):
+        elif (input_changed or downscale_changed) and (not has_mask_ref):
             preview_filename = original_filename
+            
+        # preview_filename = ""
+        # if (input_changed or downscale_changed) and rgbyp_json_available and isinstance(parsed, dict):
+        #     mask_name = parsed.get("mask", "")
+        #     mask_tensor = None
+        #     if isinstance(mask_name, str) and mask_name.strip():
+        #         mp = clipspace_path(mask_name.strip())
+        #         mask_tensor = _load_image_from_path(mp, ref_tensor=image)
+
+        #     if isinstance(mask_tensor, torch.Tensor):
+        #         st["mask_cache"] = mask_tensor.to(device=image.device, dtype=image.dtype)
+
+        #     comp = bake_composite_with_mask(preview_image, st["mask_cache"])
+        #     if isinstance(comp, torch.Tensor):
+        #         composite_filename = f"RGBYPBridge-rgbyp-composite-{node_suffix}.png"
+        #         saved_comp = save_image_tensor_to_clipspace(comp, composite_filename, max_side=0)
+        #         preview_filename = saved_comp or ""
+        #     if not preview_filename:
+        #         preview_filename = original_filename
+
+        # elif (input_changed or downscale_changed) and (not rgbyp_json_available):
+        #     preview_filename = original_filename
 
         preview_image = None
         mask_temp = None
@@ -388,6 +451,13 @@ class RGBYPMaskBridge:
         #         rgbyp_json = json.dumps({"dhash": current_dhash_str, "fixed_timestamp": st["fixed_timestamp"]})
         # except Exception:
         #     pass
+
+        # Inject fixed_timestamp ONLY when json is empty/invalid — never touch an already-valid dict
+        try:
+            if not isinstance(parsed, dict):
+                rgbyp_json = json.dumps({"fixed_timestamp": st["fixed_timestamp"]})
+        except Exception:
+            pass        
 
         # Convert rgbyp_mask (IMAGE-like RGBA tensor) to regular MASK (1,H,W float)
         # Priority: rgbyp mask from editor → black 64px fallback

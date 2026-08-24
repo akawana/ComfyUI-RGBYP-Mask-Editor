@@ -530,14 +530,15 @@ import {
             console.warn("[RGBYPUtils] handleResetMask: failed to preload original preview image", e);
         }
 
-        // clear json at the end
-        updateWidgetValue(node, "rgbyp_json", "", true);
+        // clear json but keep fixed_timestamp — never lose it
+        const preserved = obj.fixed_timestamp ? { fixed_timestamp: obj.fixed_timestamp } : {};
+        updateWidgetValue(node, "rgbyp_json", JSON.stringify(preserved), true);
 
         // runPartialExecutionForNode(node);
         return;
         // }
     }
-
+    
     const BUTTON_H = 26;
     const BUTTON_PAD_X = 10;
     const BUTTON_GAP = 6;

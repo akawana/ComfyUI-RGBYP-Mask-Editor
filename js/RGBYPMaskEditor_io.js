@@ -289,6 +289,18 @@ export async function saveMask() {
         return;
     }
 
+    console.log("[RGBYP DEBUG] saveMask start", {
+        cachedNames: state.rgbypNames,
+        currentWidgetJson: node.widgets?.find(w => w.name === "rgbyp_json")?.value,
+        currentSuffix: (() => {
+            try {
+                const raw = node.widgets?.find(w => w.name === "rgbyp_json")?.value;
+                const parsed = raw ? JSON.parse(raw) : null;
+                return parsed?.fixed_timestamp ? `${node.id}-${parsed.fixed_timestamp}` : String(node.id);
+            } catch (_) { return "parse-error"; }
+        })(),
+    });
+
     const originalCanvas = state.originalCanvas;
     const maskCanvas = state.maskCanvas;
     const baseImg = state.baseImg;
