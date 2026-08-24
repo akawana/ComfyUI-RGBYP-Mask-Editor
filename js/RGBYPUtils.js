@@ -122,7 +122,7 @@ import {
                     });
                     URL.revokeObjectURL(url);
 
-                    console.log("[RGBYP] initBaseImageAndCanvas: cloned node.imgs[0] into new Image", { w, h });
+                    // console.log("[RGBYP] initBaseImageAndCanvas: cloned node.imgs[0] into new Image", { w, h });
                     baseImg = img;
                 } catch (e) {
                     console.warn("[RGBYP] initBaseImageAndCanvas: clone from node.imgs[0] failed, fallback to URL", e);
@@ -632,7 +632,7 @@ import {
         const oldMD = node.onMouseDown;
         node.onMouseDown = function (e, pos, canvas) {
 
-            console.log("RGBYPUtils: node.onMouseDown", e, pos);
+            // console.log("RGBYPUtils: node.onMouseDown", e, pos);
 
             if (e.type !== "pointerdown" && e.type !== "mousedown") {
                 return oldMD ? oldMD.call(this, e, pos, canvas) : false;
@@ -651,14 +651,14 @@ import {
                 y >= rc.y && y <= rc.y + rc.h;
 
             if (hit(r.open)) {
-                console.log("RGBYPUtils: Load Mask button clicked");
+                // console.log("RGBYPUtils: Load Mask button clicked");
                 handleLoadMask(this).catch(console.error);
                 this.graph?.setDirtyCanvas(true, true);
                 return true;
             }
 
             if (hit(r.reset)) {
-                console.log("RGBYPUtils: Reset Mask button clicked");
+                // console.log("RGBYPUtils: Reset Mask button clicked");
                 handleResetMask(this).catch(console.error);
                 this.graph?.setDirtyCanvas(true, true);
                 return true;
@@ -973,9 +973,9 @@ import {
                 // return;
 
                 const currentWidget = getWidget(this, "rgbyp_json");
-                console.log("[RGBYP] v:", v, "| typeof v:", typeof v);
-                console.log("[RGBYP] currentWidget.value:", currentWidget?.value, "| typeof:", typeof currentWidget?.value);
-                console.log("[RGBYP] strict equal:", currentWidget?.value === v);
+                // console.log("[RGBYP] v:", v, "| typeof v:", typeof v);
+                // console.log("[RGBYP] currentWidget.value:", currentWidget?.value, "| typeof:", typeof currentWidget?.value);
+                // console.log("[RGBYP] strict equal:", currentWidget?.value === v);
                 if (currentWidget && currentWidget.value === v) {
                     return;
                 }

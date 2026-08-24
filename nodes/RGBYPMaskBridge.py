@@ -221,7 +221,7 @@ class RGBYPMaskBridge:
 
         _img_for_hash = image[0] if isinstance(image, list) else image
         _hash = hashlib.sha256(_img_for_hash.detach().cpu().numpy().tobytes()).hexdigest()[:16] if isinstance(_img_for_hash, torch.Tensor) else "N/A"
-        print(f"[BRIDGE DEBUG] unique_id={unique_id} sha={_hash} json={repr(rgbyp_json)[:50]} downscale={downscale_preview_to} sens={image_change_sensitivity}")        
+        # print(f"[BRIDGE DEBUG] unique_id={unique_id} sha={_hash} json={repr(rgbyp_json)[:50]} downscale={downscale_preview_to} sens={image_change_sensitivity}")        
 
         # print(f"[BRIDGE DEBUG] image data_ptr={image[0].data_ptr() if isinstance(image, list) else image.data_ptr()} shape={image[0].shape if isinstance(image, list) else image.shape} json_hash={hash(rgbyp_json)}")
 
