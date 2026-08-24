@@ -93,7 +93,7 @@ export function updateWidgetValue(node, widgetName, newValue, callCallback = tru
         }
     }
 
-    node.setDirtyCanvas(true, false);
+    // node.setDirtyCanvas(true, false);
 
     return true;
 }

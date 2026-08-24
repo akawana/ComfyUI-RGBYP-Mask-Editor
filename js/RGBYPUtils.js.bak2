@@ -253,7 +253,7 @@ import {
                     existingDhash = rawParsed.dhash;
                 }
             }
-        } catch (_) { }
+        } catch (_) {}
 
         let maskOutName = "";
         let compositeOutName = "";
@@ -504,37 +504,37 @@ import {
         // }
 
         // if (isLoadImageNode) {
-        // read json (do NOT use getWidgetJSON(), it is strict)
-        const raw = getWidgetValue(node, "rgbyp_json");
-        if (!raw) return;
+            // read json (do NOT use getWidgetJSON(), it is strict)
+            const raw = getWidgetValue(node, "rgbyp_json");
+            if (!raw) return;
 
-        let obj = null;
-        try { obj = JSON.parse(raw); } catch (_) { obj = null; }
-        if (!obj || typeof obj !== "object") return;
+            let obj = null;
+            try { obj = JSON.parse(raw); } catch (_) { obj = null; }
+            if (!obj || typeof obj !== "object") return;
 
-        const originalName = String(obj.original || "");
-        if (!originalName) return;
+            const originalName = String(obj.original || "");
+            if (!originalName) return;
 
-        // set preview to original (clipspace\filename.png)
-        const originalPath = `clipspace\\${originalName}`;
+            // set preview to original (clipspace\filename.png)
+            const originalPath = `clipspace\\${originalName}`;
 
-        // update widget (this is the main preview mechanism for RGBYPLoadImage)
-        updateWidgetValue(node, "image", originalPath, true);
+            // update widget (this is the main preview mechanism for RGBYPLoadImage)
+            updateWidgetValue(node, "image", originalPath, true);
 
-        // optional: also set node.img/imgs for immediate redraw (harmless if unused)
-        try {
-            const img = await loadImage(originalName, "input", "clipspace");
-            node.img = img;
-            node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
-        } catch (e) {
-            console.warn("[RGBYPUtils] handleResetMask: failed to preload original preview image", e);
-        }
+            // optional: also set node.img/imgs for immediate redraw (harmless if unused)
+            try {
+                const img = await loadImage(originalName, "input", "clipspace");
+                node.img = img;
+                node.imgs = Array.isArray(node.imgs) ? (node.imgs[0] = img, node.imgs) : [img];
+            } catch (e) {
+                console.warn("[RGBYPUtils] handleResetMask: failed to preload original preview image", e);
+            }
 
-        // clear json at the end
-        updateWidgetValue(node, "rgbyp_json", "", true);
+            // clear json at the end
+            updateWidgetValue(node, "rgbyp_json", "", true);
 
-        // runPartialExecutionForNode(node);
-        return;
+            // runPartialExecutionForNode(node);
+            return;
         // }
     }
 
@@ -795,7 +795,7 @@ import {
         }
     }
 
-    function setDownscaleFactor(node, fromSettings = false) {
+    function setDownscaleFactor(node) {
         try {
             const wDownscale = getWidget(node, "downscale_preview_to");
             if (wDownscale) {
@@ -809,13 +809,9 @@ import {
                 updateWidgetValue(node, "scale_mask_output", !!__rgbyp_scale_mask_output, true);
             }
 
-            // image_change_sensitivity is only overwritten when the user
-            // explicitly changes the setting — not on page load / workflow load.
-            if (fromSettings) {
-                const wSensitivity = getWidget(node, "image_change_sensitivity");
-                if (wSensitivity) {
-                    updateWidgetValue(node, "image_change_sensitivity", Number(__rgbyp_image_change_sensitivity) || 20, true);
-                }
+            const wSensitivity = getWidget(node, "image_change_sensitivity");
+            if (wSensitivity) {
+                updateWidgetValue(node, "image_change_sensitivity", Number(__rgbyp_image_change_sensitivity) || 20, true);
             }
 
             // node.graph?.setDirtyCanvas(true, true);
@@ -823,12 +819,12 @@ import {
             console.warn("[RGBYPUtils] setDownscaleFactor failed", e);
         }
     }
-    function applyDownscaleToAllBridgeNodes(fromSettings = false) {
+    function applyDownscaleToAllBridgeNodes() {
         // console.log("[RGBYPUtils] applyDownscaleToAllBridgeNodes");
         const nodes = app?.graph?._nodes || [];
         for (const n of nodes) {
             if ((n?.type || n?.comfyClass) === "RGBYPMaskBridge") {
-                setDownscaleFactor(n, fromSettings);
+                setDownscaleFactor(n);
             }
         }
     }
@@ -847,7 +843,7 @@ import {
             category: ["AK", "RGBYP", "Downscale to maximum side"],
             onChange: (newVal, oldVal) => {
                 __rgbyp_ds_maxSide = Number(newVal) || 0;
-                applyDownscaleToAllBridgeNodes(true);
+                applyDownscaleToAllBridgeNodes();
             },
         });
         S.addSetting({
@@ -858,7 +854,7 @@ import {
             category: ["AK", "RGBYP", "Scale output RGBYP mask to input image size"],
             onChange: (newVal, oldVal) => {
                 __rgbyp_scale_mask_output = !!newVal;
-                applyDownscaleToAllBridgeNodes(true);
+                applyDownscaleToAllBridgeNodes();
             },
         });
         S.addSetting({
@@ -869,7 +865,7 @@ import {
             category: ["AK", "RGBYP", "Downscale preview in Mask Bridge node"],
             onChange: (newVal, oldVal) => {
                 __rgbyp_ds_enable = !!newVal;
-                applyDownscaleToAllBridgeNodes(true);
+                applyDownscaleToAllBridgeNodes();
             },
         });
         S.addSetting({
@@ -885,7 +881,7 @@ import {
             category: ["AK", "RGBYP", "Mask Bridge image change sensitivity (1 to 63)"],
             onChange: (newVal, oldVal) => {
                 __rgbyp_image_change_sensitivity = Number(newVal) || 20;
-                applyDownscaleToAllBridgeNodes(true);
+                applyDownscaleToAllBridgeNodes();
             },
         });
 
@@ -969,21 +965,8 @@ import {
                     }
                 }
 
-
-                // return;
-
-                const currentWidget = getWidget(this, "rgbyp_json");
-                console.log("[RGBYP] v:", v, "| typeof v:", typeof v);
-                console.log("[RGBYP] currentWidget.value:", currentWidget?.value, "| typeof:", typeof currentWidget?.value);
-                console.log("[RGBYP] strict equal:", currentWidget?.value === v);
-                if (currentWidget && currentWidget.value === v) {
-                    return;
-                }
-
-                // console.log("[RGBYP] returned:", "FALSE");
-
                 this.__rgbyp_skip_clear_json_once = true;
-                // console.log("[RGBYP] RGBYPMaskBridge onExecuted", v);
+                console.log("[RGBYP] RGBYPMaskBridge onExecuted", v);
                 updateWidgetValue(this, "rgbyp_json", v, true);
                 // node.graph?.setDirtyCanvas(true, true);
             };

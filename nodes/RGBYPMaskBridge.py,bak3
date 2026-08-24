@@ -1,5 +1,3 @@
-from email.mime import image
-import hashlib
 import json
 from typing import Any, Dict, Optional
 
@@ -159,9 +157,9 @@ class RGBYPMaskBridge:
     CATEGORY = "AK/RGBYP"
     RETURN_TYPES = ("IMAGE", "MASK", "IMAGE")
     RETURN_NAMES = ("image", "mask", "rgbyp_mask")
-    OUTPUT_NODE = False
+    OUTPUT_NODE = True
     INPUT_IS_LIST = True
-    OUTPUT_IS_LIST = (False, False, False)
+    OUTPUT_IS_LIST = (True, False, False)
     FUNCTION = "execute"
 
     _state: Dict[str, Dict[str, Any]] = {}
@@ -189,7 +187,7 @@ class RGBYPMaskBridge:
             if "fixed_timestamp" not in st:
                 st["fixed_timestamp"] = str(int(time.time() * 1000))
         return st
-    
+
     def execute(
         self,
         image,
@@ -198,7 +196,6 @@ class RGBYPMaskBridge:
         rgbyp_json="",
         unique_id=None,
     ):
-
         # With INPUT_IS_LIST=True all inputs arrive as lists.
         # Unwrap scalars first.
         if isinstance(downscale_preview_to, list):
@@ -218,20 +215,13 @@ class RGBYPMaskBridge:
             image = [image]
 
         is_batch = False
-
-        _img_for_hash = image[0] if isinstance(image, list) else image
-        _hash = hashlib.sha256(_img_for_hash.detach().cpu().numpy().tobytes()).hexdigest()[:16] if isinstance(_img_for_hash, torch.Tensor) else "N/A"
-        print(f"[BRIDGE DEBUG] unique_id={unique_id} sha={_hash} json={repr(rgbyp_json)[:50]} downscale={downscale_preview_to} sens={image_change_sensitivity}")        
-
-        # print(f"[BRIDGE DEBUG] image data_ptr={image[0].data_ptr() if isinstance(image, list) else image.data_ptr()} shape={image[0].shape if isinstance(image, list) else image.shape} json_hash={hash(rgbyp_json)}")
-
         if len(image) != 1:
             is_batch = True
         elif isinstance(image[0], torch.Tensor) and image[0].dim() == 4 and image[0].shape[0] != 1:
             is_batch = True
 
         if is_batch:
-            # Show error image in preview, pass the original image through untouched.
+            # Show error image, pass through all images as list, don't touch rgbyp_json.
             # Reset prev_input_sig so the next single-image run always refreshes the preview.
             first = image[0]
             uid = str(unique_id) if unique_id is not None else "none"
@@ -249,11 +239,7 @@ class RGBYPMaskBridge:
                 ],
                 "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
             }
-            # image is the raw list that arrived via INPUT_IS_LIST — pass it straight through.
-            # With OUTPUT_IS_LIST=False ComfyUI expects a single tensor; torch.cat the list
-            # so the output is identical to what came in (one batched tensor).
-            pass_through = torch.cat(image, dim=0) if len(image) > 1 else image[0]
-            return {"result": (pass_through, _make_black_mask_64(device=str(first.device)), black), "ui": ui}
+            return {"result": (image, _make_black_mask_64(device=str(first.device)), black), "ui": ui}
 
         # Single image — unwrap the list
         image = image[0]
@@ -298,25 +284,23 @@ class RGBYPMaskBridge:
         sensitivity = int(image_change_sensitivity) if isinstance(image_change_sensitivity, int) else 20
         sensitivity = max(1, min(63, sensitivity))
 
-        stored_dhash = st.get("last_dhash", None)
+        if rgbyp_json_available and isinstance(parsed, dict):
+            stored_dhash = parsed.get("dhash", None)
+            if stored_dhash is not None:
+                try:
+                    stored_dhash_int = int(stored_dhash)
+                except Exception:
+                    stored_dhash_int = None
 
-        if rgbyp_json_available and stored_dhash is not None:
-            try:
-                stored_dhash_int = int(stored_dhash)
-            except Exception:
-                stored_dhash_int = None
-
-            if stored_dhash_int is not None:
-                dist = dhash_distance(current_dhash, stored_dhash_int)
-                if dist > sensitivity:
-                    # Image changed significantly — reset mask and clear json
-                    st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
-                    st["previousTimestamp"] = 0
-                    rgbyp_json = ""
-                    rgbyp_json_available = False
-                    parsed = None
-
-        st["last_dhash"] = current_dhash_str
+                if stored_dhash_int is not None:
+                    dist = dhash_distance(current_dhash, stored_dhash_int)
+                    if dist > sensitivity:
+                        # Image changed significantly — reset mask and clear json
+                        st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
+                        st["previousTimestamp"] = 0
+                        rgbyp_json = ""
+                        rgbyp_json_available = False
+                        parsed = None
 
         mask_temp = None
         if rgbyp_json_available and isinstance(parsed, dict):
@@ -379,15 +363,15 @@ class RGBYPMaskBridge:
         mask_temp = None
 
         # Inject dhash and fixed_timestamp — preserves all existing fields
-        # try:
-        #     if isinstance(parsed, dict):
-        #         parsed["dhash"] = current_dhash_str
-        #         parsed["fixed_timestamp"] = st["fixed_timestamp"]
-        #         rgbyp_json = json.dumps(parsed)
-        #     else:
-        #         rgbyp_json = json.dumps({"dhash": current_dhash_str, "fixed_timestamp": st["fixed_timestamp"]})
-        # except Exception:
-        #     pass
+        try:
+            if isinstance(parsed, dict):
+                parsed["dhash"] = current_dhash_str
+                parsed["fixed_timestamp"] = st["fixed_timestamp"]
+                rgbyp_json = json.dumps(parsed)
+            else:
+                rgbyp_json = json.dumps({"dhash": current_dhash_str, "fixed_timestamp": st["fixed_timestamp"]})
+        except Exception:
+            pass
 
         # Convert rgbyp_mask (IMAGE-like RGBA tensor) to regular MASK (1,H,W float)
         # Priority: rgbyp mask from editor → black 64px fallback
@@ -406,7 +390,7 @@ class RGBYPMaskBridge:
             "rgbyp_json": [rgbyp_json if rgbyp_json is not None else ""],
         }
 
-        return {"result": (output_image, regular_mask, st["mask_cache"]), "ui": ui}
+        return {"result": ([output_image], regular_mask, st["mask_cache"]), "ui": ui}
 
 
 NODE_CLASS_MAPPINGS = {"RGBYPMaskBridge": RGBYPMaskBridge}
