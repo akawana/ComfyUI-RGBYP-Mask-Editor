@@ -335,10 +335,21 @@ class RGBYPMaskBridge:
         current_dhash = get_dhash(image)
         current_dhash_str = str(current_dhash)
 
-        sensitivity = int(image_change_sensitivity) if isinstance(image_change_sensitivity, int) else 20
+        try:
+            sensitivity = int(float(image_change_sensitivity))
+        except (TypeError, ValueError):
+            sensitivity = 20
         sensitivity = max(1, min(63, sensitivity))
 
-        stored_dhash = st.get("last_dhash", None)
+        # Prefer dhash embedded in the persisted rgbyp_json (survives bypass / server restart)
+        # over the in-memory state, which is only updated while the node actually executes.
+        stored_dhash = None
+        if isinstance(parsed, dict) and parsed.get("dhash"):
+            stored_dhash = parsed.get("dhash")
+        if stored_dhash is None:
+            stored_dhash = st.get("last_dhash", None)
+
+        # print(f"[RGBYP DEBUG] rgbyp_json_available={rgbyp_json_available} stored_dhash={stored_dhash} sensitivity={sensitivity}")
 
         if rgbyp_json_available and stored_dhash is not None:
             try:
@@ -348,6 +359,7 @@ class RGBYPMaskBridge:
 
             if stored_dhash_int is not None:
                 dist = dhash_distance(current_dhash, stored_dhash_int)
+                # print(f"[RGBYP DEBUG] current_dhash={current_dhash} stored_dhash_int={stored_dhash_int} dist={dist} sensitivity={sensitivity} will_reset={dist > sensitivity}")
                 if dist > sensitivity:
                     # Image changed significantly — reset mask and clear json
                     st["mask_cache"] = _make_black_64(device=str(image.device), dtype=image.dtype)
@@ -441,21 +453,16 @@ class RGBYPMaskBridge:
         preview_image = None
         mask_temp = None
 
-        # Inject dhash and fixed_timestamp — preserves all existing fields
-        # try:
-        #     if isinstance(parsed, dict):
-        #         parsed["dhash"] = current_dhash_str
-        #         parsed["fixed_timestamp"] = st["fixed_timestamp"]
-        #         rgbyp_json = json.dumps(parsed)
-        #     else:
-        #         rgbyp_json = json.dumps({"dhash": current_dhash_str, "fixed_timestamp": st["fixed_timestamp"]})
-        # except Exception:
-        #     pass
-
-        # Inject fixed_timestamp ONLY when json is empty/invalid — never touch an already-valid dict
+        # Inject dhash + fixed_timestamp — preserves all existing fields.
+        # dhash must be written every run so it survives bypass / server restart
+        # (it lives in the persisted widget value, not just in-memory state).
         try:
-            if not isinstance(parsed, dict):
-                rgbyp_json = json.dumps({"fixed_timestamp": st["fixed_timestamp"]})
+            if isinstance(parsed, dict):
+                parsed["dhash"] = current_dhash_str
+                parsed["fixed_timestamp"] = st["fixed_timestamp"]
+                rgbyp_json = json.dumps(parsed)
+            else:
+                rgbyp_json = json.dumps({"dhash": current_dhash_str, "fixed_timestamp": st["fixed_timestamp"]})
         except Exception:
             pass        
 
