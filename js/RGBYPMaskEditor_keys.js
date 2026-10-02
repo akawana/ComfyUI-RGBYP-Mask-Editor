@@ -373,17 +373,12 @@ function onMaskMouseDown(e) {
         return;
     }
 
-    if (state.currentTool === "Erase") {
-        state.drawMode = "Erase";
-    } else {
-
-        state.drawMode = (e.button === 2) ? "Erase" : "Paint";
-    }
+    if (e.button !== 0 && e.button !== 2) return;
 
     const canvas = state.maskCanvas;
     if (!canvas) return;
 
-    if (e.button !== 0 && e.button !== 2) return;
+    state.drawMode = (state.currentTool === "Erase" || e.button === 2) ? "Erase" : "Paint";
 
     e.preventDefault();
 
@@ -395,26 +390,29 @@ function onMaskMouseDown(e) {
 
     const ctx = canvas.getContext("2d");
 
+    let color;
     if (state.drawMode === "Erase") {
         ctx.globalCompositeOperation = "destination-out";
-        ctx.strokeStyle = "rgba(0,0,0,1)";
+        color = "rgba(0,0,0,1)";
     } else {
         ctx.globalCompositeOperation = "source-over";
         const idx = state.drawColor ?? 0;
         const rgb = colorListRGB[idx]?.color || [255, 0, 0];
-        const strokeColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1)`;
-        // console.log("[RGBYP] onMaskMouseDown strokeColor:", idx);
-        ctx.strokeStyle = strokeColor;
+        color = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1)`;
     }
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
 
     ctx.lineWidth = state.brushSize || 40;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
     ctx.beginPath();
-    ctx.moveTo(x, y);
+    ctx.arc(x, y, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
 
-    onMaskDraw(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
 }
 
 function onMaskDraw(e) {
